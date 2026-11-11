@@ -9,13 +9,16 @@ import "./styles/theme.css";
 
 import App from "./App.jsx";
 import { AuthProvider } from "./lib/auth.jsx";
+import { CartProvider } from "./lib/cart.jsx";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <LazyMotion features={domAnimation} strict>
       <BrowserRouter>
         <AuthProvider>
-          <App />
+          <CartProvider>
+            <App />
+          </CartProvider>
         </AuthProvider>
       </BrowserRouter>
     </LazyMotion>

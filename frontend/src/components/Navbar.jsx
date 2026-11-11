@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
+import { m } from "motion/react";
 import { api } from "@/lib/api.js";
 import { useAuth } from "@/lib/auth.jsx";
+import { useCart } from "@/lib/cart.jsx";
 import { uiIcons } from "@/styles/icons.js";
+import { spring } from "@/styles/tokens/motion.js";
 import Button from "./ui/Button.jsx";
 
 const links = [
@@ -18,6 +21,7 @@ const ErrorIcon = uiIcons.error;
 
 export default function Navbar() {
   const { profile, role, logout } = useAuth();
+  const { count } = useCart();
   const [health, setHealth] = useState("checking");
 
   useEffect(() => {
@@ -60,10 +64,22 @@ export default function Navbar() {
         <div className="ml-auto flex items-center gap-3">
           <Link
             to="/cart"
-            className="flex items-center gap-2 rounded-full px-3 py-2 text-label font-semibold text-fg-muted hover:bg-muted"
+            className="relative flex items-center gap-2 rounded-full px-3 py-2 text-label font-semibold text-fg-muted hover:bg-muted"
           >
             <CartIcon size={20} aria-hidden="true" />
             <span className="hidden sm:inline">Cart</span>
+            {count > 0 ? (
+              <m.span
+                key={count}
+                initial={{ scale: 1 }}
+                animate={{ scale: [1, 1.18, 1] }}
+                transition={spring.snappy}
+                aria-label={`${count} items in cart`}
+                className="absolute -top-0.5 -right-0.5 flex size-5 items-center justify-center rounded-full bg-primary text-caption font-semibold text-on-primary tabular-nums"
+              >
+                {count}
+              </m.span>
+            ) : null}
           </Link>
 
           {canUseAdmin ? (

@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { m } from "motion/react";
 import StockIndicator from "../components/StockIndicator.jsx";
+import AddToCartButton from "../components/AddToCartButton.jsx";
 import { EmptyState, ErrorNotice, LoadingLines } from "../components/AsyncState.jsx";
 import { formatPHP, unwrap } from "@/lib/format.js";
 import { useApi } from "@/lib/useApi.js";
@@ -89,6 +90,8 @@ export default function ProductDetail() {
           {product.description ? (
             <p className="max-w-[65ch] text-body-md text-fg-muted">{product.description}</p>
           ) : null}
+
+          <AddToCartButton product={product} size="lg" className="self-start" />
         </div>
       </div>
     </article>

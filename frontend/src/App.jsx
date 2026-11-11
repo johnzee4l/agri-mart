@@ -17,6 +17,7 @@ const Auth = lazy(() => import("./pages/Auth.jsx"));
 const Account = lazy(() => import("./pages/Account.jsx"));
 const Announcements = lazy(() => import("./pages/Announcements.jsx"));
 const Contact = lazy(() => import("./pages/Contact.jsx"));
+const OrderResult = lazy(() => import("./pages/OrderResult.jsx"));
 
 const AdminLayout = lazy(() => import("./admin/AdminLayout.jsx"));
 const Dashboard = lazy(() => import("./admin/Dashboard.jsx"));
@@ -52,7 +53,22 @@ export default function App() {
               <Route path="/products" element={<Products />} />
               <Route path="/products/:id" element={<ProductDetail />} />
               <Route path="/cart" element={<Cart />} />
-              <Route path="/checkout" element={<Checkout />} />
+              <Route
+                path="/checkout"
+                element={
+                  <RequireRole>
+                    <Checkout />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="/orders/:id"
+                element={
+                  <RequireRole>
+                    <OrderResult />
+                  </RequireRole>
+                }
+              />
               <Route path="/login" element={<Auth mode="login" />} />
               <Route path="/signup" element={<Auth mode="signup" />} />
               <Route path="/forgot" element={<Auth mode="forgot" />} />

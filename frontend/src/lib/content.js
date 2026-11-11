@@ -32,6 +32,7 @@ export function useContent() {
       cta_href: hero.cta_href ?? FALLBACK_HERO.cta_href,
     },
     banners: Array.isArray(content.home_banners) ? content.home_banners : [],
+    rates: content.delivery_rates ?? null,
     store: store
       ? {
           address: store.address ?? null,
