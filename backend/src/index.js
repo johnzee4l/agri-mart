@@ -5,7 +5,7 @@ import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { Server } from "socket.io";
 
-import { errorHandler, notFound } from "./middleware.js";
+import { ApiError, errorHandler, notFound } from "./middleware.js";
 import { initChat } from "./chat.js";
 
 import { authRouter } from "./routes/auth.js";
@@ -36,7 +36,8 @@ app.use(
   cors({
     origin(origin, callback) {
       if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error("Origin not allowed by CORS"));
+      // A rejected origin is a client error, not a server fault.
+      return callback(new ApiError(403, "Origin not allowed"));
     },
   }),
 );
