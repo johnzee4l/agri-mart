@@ -2,10 +2,10 @@
 
 | Field | Value |
 | --- | --- |
-| Version | 0.1 (Phase 1 skeleton) |
+| Version | 0.2 (Phase 1 implemented) |
 | Owner | Member 2 (`backend/src`) |
 | Source | `blueprint.md` sections 6 and 7, plus `designtokens.md` for UI-facing shapes |
-| Status | Every endpoint below currently answers `501 { "error": "Not implemented yet" }`. Each phase replaces its stubs. |
+| Status | Phase 1 (health, auth, me) is implemented. Later phases still answer `501 { "error": "Not implemented yet" }` and replace their stubs in turn. |
 
 **Rule:** anyone changing an endpoint updates this file in the same PR.
 
@@ -56,6 +56,34 @@
 | `GET /chat/messages` | C, S | Thread history; customers read only their own conversation | 4 |
 | `GET /push/public-key` | C, S | VAPID public key | 4 or 5 (C1) |
 | `POST /push/subscribe` · `POST /push/unsubscribe` | C, S | Push subscription management | 4 or 5 (C1) |
+
+## Phase 1 request and response bodies
+
+**Auth.** Supabase Auth sits behind these routes; the browser never holds a Supabase key.
+
+| Endpoint | Body | Success |
+| --- | --- | --- |
+| `POST /auth/register` | `{ email, password, full_name, phone? }` | `201 { data: { id, email }, message }`. Profile row comes from the `handle_new_user` trigger |
+| `POST /auth/login` | `{ email, password }` | `200 { access_token, refresh_token, expires_at, profile }` |
+| `POST /auth/refresh` | `{ refresh_token }` | `200 { access_token, refresh_token, expires_at }` |
+| `POST /auth/logout` | — (Bearer) | `204`, all sessions for the account revoked |
+| `POST /auth/forgot-password` | `{ email }` | `202 { message }` whether or not the address exists |
+| `POST /auth/reset-password` | `{ access_token, password }` | `200 { message }` |
+
+Auth answers: `400` validation (with `details[].path`), `401` bad credentials or expired session, `403` deactivated account, `409` email already registered, `429` more than 5 login attempts per IP per minute (or 5 reset requests per hour).
+
+**Profile and addresses.** All require the Bearer token and are scoped to the caller.
+
+| Endpoint | Body | Success |
+| --- | --- | --- |
+| `GET /me` | — | `200 { data: profile }` (includes `email`) |
+| `PATCH /me` | `{ full_name?, phone? }` | `200 { data: profile }` |
+| `GET /me/addresses` | — | `200 { data, page, total }`, default first, archived excluded |
+| `POST /me/addresses` | `{ street, barangay, municipality, province, latitude?, longitude?, is_default? }` | `201 { data: address }` |
+| `PATCH /me/addresses/:id` | Any of the fields above | `200 { data: address }` |
+| `DELETE /me/addresses/:id` | — | `204`, sets `deleted_at` (archive) |
+
+Rules: the first saved address becomes the default; setting `is_default: true` clears the previous default; archiving the default promotes the newest remaining address. An address owned by another account answers `404`, not `403`.
 
 ## Realtime (`backend/src/chat.js`)
 
