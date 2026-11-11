@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Version | 0.2 (Phase 1 implemented) |
+| Version | 0.3 (Phases 1–3 implemented) |
 | Owner | Member 2 (`backend/src`) |
 | Source | `blueprint.md` sections 6 and 7, plus `designtokens.md` for UI-facing shapes |
 | Status | Phases 1 and 2 (health, auth, me, catalog, announcements, content, uploads) are implemented. Later phases still answer `501 { "error": "Not implemented yet" }` and replace their stubs in turn. |
@@ -108,6 +108,36 @@ Rules: the first saved address becomes the default; setting `is_default: true` c
 **Content.** `GET /content` → `200 { data: { home_hero, home_banners, about, contact, store_location, delivery_rates } }`, a map of key to jsonb value. `PUT /content/:key` (admin) body `{ value }` upserts one key; unknown keys answer `404`.
 
 **Uploads.** `POST /uploads` (admin) is `multipart/form-data` with one `file` field. JPEG, PNG, WebP, GIF or AVIF, 5 MB maximum. → `201 { data: { url, path } }` with the public URL of the object in `public-images`.
+
+## Phase 3 request and response bodies
+
+**Orders.** Every route needs the Bearer token; staff and admin see all orders, customers only their own.
+
+`POST /orders` body: `{ items: [{ product_id, qty }], fulfillment_type: "delivery" | "pickup", address_id?, method: "cod" | "gcash" | "card" | "grab_pay" }`.
+
+Prices, stock and the delivery fee are decided on the server; nothing money-related is read from the body. Repeats of one product are merged before the stock check, and a short line answers `400` with `details[].path` such as `items.0.qty`. Archived products are refused the same way. Delivery needs an address the caller owns (`404` when it is not theirs) and pickup stores `address_id: null` with a fee of `0`.
+
+Delivery fee: `base_fee + per_km × haversine(store_location, address pin)`, both read from `site_content`, rounded to the centavo. An address without a pin pays `base_fee`; a missing `delivery_rates` or store pin with a pinned address answers `503`.
+
+Online methods create the PayMongo intent **before** the order row is written, so a provider failure cannot leave an orphan order: `503` when the secret key is not configured, `502` when PayMongo refuses. The intent is created for the full total in centavos with `capture_type: automatic`; the browser attaches the payment method with the returned `client_key`.
+
+→ `201 { order: { …, order_items }, payment: { intent_id, client_key } }`, with `payment: null` for COD. The `payments` row starts at `pending` (`paymongo_ref` holds the intent id).
+
+`GET /orders` → `200 { data, page, total }`, newest first, accepting `?status&from&to&page&limit`; `limit` defaults to 20 and caps at 60. `GET /orders/:id` → `200 { data }` with `order_items` (plus each product's `name`, `unit`, `image_url`) and `payments`. Another account's order answers `404`, never `403`.
+
+`POST /orders/:id/cancel` → `200 { data }` while the order is `pending` (otherwise `409`), and its pending payment row becomes `failed`.
+
+`PATCH /orders/:id/status` (staff, admin) body `{ status }`. Allowed moves: `pending → paid | cancelled`, `paid → preparing | cancelled`, `preparing → out_for_delivery | completed | cancelled`, `out_for_delivery → completed`. COD may skip the paid step with `pending → preparing`; online orders may not. Pickup orders skip `out_for_delivery` (`400`). Any other move is `409`. Reaching `preparing` calls `deduct_stock` once for COD, and COD is marked `paid` with `paid_at` at `completed`. Every change emails the customer, and a deduction broadcasts `stock`.
+
+**PayMongo webhook.** `POST /payments/webhook`, no token. The signature is HMAC-SHA256 over `"<t>.<raw body>"` with `PAYMONGO_WEBHOOK_SECRET`, compared in constant time against `te` (test) or `li` (live) from `Paymongo-Signature`. A missing secret answers `503`; a bad signature, a wrong timestamp or a body changed after signing answers `401`.
+
+Only `payment` resources act. `payment_intent_id` finds the `payments` row through `paymongo_ref`: success marks the payment `paid`, moves a `pending` order to `paid` and calls `deduct_stock` once; a failure marks the payment `failed` and leaves the order `pending` for another attempt. Repeated deliveries of a paid payment and unrelated events are acknowledged with `200` so PayMongo stops retrying; unknown intents are ignored the same way.
+
+Local testing needs a public HTTPS URL. Run `ngrok http 4000` (any tunnel works) and register `https://<tunnel>/api/payments/webhook` for `payment.paid` and `payment.failed` in the PayMongo dashboard, then copy its signing secret into `PAYMONGO_WEBHOOK_SECRET`.
+
+**Order statuses.** `pending → paid → preparing → out_for_delivery → completed`, plus `cancelled`; pickup skips `out_for_delivery`.
+
+**Email.** Order confirmation and every status change go to the account email over Gmail SMTP (`SMTP_USER`, `SMTP_PASS`). Mail is best effort: an unconfigured or failing mailbox never fails an order request.
 
 ## Realtime (`backend/src/chat.js`)
 

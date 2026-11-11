@@ -15,3 +15,10 @@ export async function getProfile(userId) {
 
   return data;
 }
+
+/** The address lives in auth.users, not profiles. Mail is best effort. */
+export async function getUserEmail(userId) {
+  const { data, error } = await supabase().auth.admin.getUserById(userId);
+  if (error || !data?.user?.email) return null;
+  return data.user.email;
+}
