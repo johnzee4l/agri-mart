@@ -30,7 +30,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request(path, { method = "GET", body, retry = true } = {}) {
+async function request(path, { method = "GET", body, retry = true, signal } = {}) {
   const token = getToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
@@ -39,11 +39,12 @@ async function request(path, { method = "GET", body, retry = true } = {}) {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
 
   if (response.status === 401 && retry && onUnauthorized) {
     const refreshed = await onUnauthorized();
-    if (refreshed) return request(path, { method, body, retry: false });
+    if (refreshed) return request(path, { method, body, retry: false, signal });
   }
 
   const payload = response.status === 204 ? null : await response.json().catch(() => null);
@@ -60,7 +61,7 @@ async function request(path, { method = "GET", body, retry = true } = {}) {
 }
 
 export const api = {
-  get: (path) => request(path),
+  get: (path, { signal } = {}) => request(path, { signal }),
   post: (path, body) => request(path, { method: "POST", body }),
   patch: (path, body) => request(path, { method: "PATCH", body }),
   put: (path, body) => request(path, { method: "PUT", body }),

@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, getToken, setToken, setUnauthorizedHandler } from "./api.js";
 
-/* AuthContext (blueprint 6.5): login, logout, profile, role, token in localStorage,
-   automatic logout after 30 minutes of inactivity. */
+/* AuthContext (blueprint 6.5): login, register, logout, profile, role, token in
+   localStorage, automatic logout after 30 minutes of inactivity. */
 
 const AuthContext = createContext(null);
 
@@ -74,6 +74,22 @@ export function AuthProvider({ children }) {
     return data.profile ?? null;
   }, []);
 
+  /* FR-14. Signup, forgot and reset never sign the user in directly. */
+  const register = useCallback(
+    (payload) => api.post("/auth/register", payload),
+    [],
+  );
+
+  const forgotPassword = useCallback(
+    (email) => api.post("/auth/forgot-password", { email }),
+    [],
+  );
+
+  const resetPassword = useCallback(
+    (payload) => api.post("/auth/reset-password", payload),
+    [],
+  );
+
   const value = useMemo(
     () => ({
       profile,
@@ -81,9 +97,12 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(profile),
       loading,
       login,
+      register,
+      forgotPassword,
+      resetPassword,
       logout,
     }),
-    [profile, loading, login, logout],
+    [profile, loading, login, register, forgotPassword, resetPassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
