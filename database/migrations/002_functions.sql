@@ -81,6 +81,63 @@ begin
 end;
 $$;
 
+-- FR-18 reports. Aggregating in SQL keeps a date range from loading every order.
+create or replace function public.report_sales(from_date timestamptz, to_date timestamptz)
+returns table (day date, orders bigint, revenue numeric)
+language sql
+stable
+set search_path = public
+as $$
+  select date_trunc('day', o.created_at)::date as day,
+         count(*)::bigint as orders,
+         coalesce(sum(o.total_amount), 0) as revenue
+  from public.orders o
+  where o.status in ('paid', 'preparing', 'out_for_delivery', 'completed')
+    and o.created_at >= from_date
+    and o.created_at < to_date
+  group by 1
+  order by 1;
+$$;
+
+create or replace function public.report_top_products(
+  from_date timestamptz,
+  to_date timestamptz,
+  max_rows integer default 10
+)
+returns table (product_id uuid, name text, quantity bigint, revenue numeric)
+language sql
+stable
+set search_path = public
+as $$
+  select oi.product_id,
+         p.name,
+         sum(oi.quantity)::bigint as quantity,
+         coalesce(sum(oi.subtotal), 0) as revenue
+  from public.order_items oi
+  join public.orders o on o.id = oi.order_id
+  join public.products p on p.id = oi.product_id
+  where o.status in ('paid', 'preparing', 'out_for_delivery', 'completed')
+    and o.created_at >= from_date
+    and o.created_at < to_date
+  group by oi.product_id, p.name
+  order by 4 desc
+  limit max_rows;
+$$;
+
+/** Active products at or below their reorder level, lowest first (FR-10). */
+create or replace function public.low_stock_products()
+returns setof public.products
+language sql
+stable
+set search_path = public
+as $$
+  select p.*
+  from public.products p
+  where p.deleted_at is null
+    and p.stock_qty <= p.reorder_level
+  order by p.stock_qty asc, p.name asc;
+$$;
+
 /** Stock-in, adjustment or spoilage in one transaction. True when now low. */
 create or replace function public.adjust_stock(
   product_id uuid,

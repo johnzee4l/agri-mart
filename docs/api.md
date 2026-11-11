@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Version | 0.3 (Phases 1–3 implemented) |
+| Version | 0.5 (Phase 4 complete) |
 | Owner | Member 2 (`backend/src`) |
 | Source | `blueprint.md` sections 6 and 7, plus `designtokens.md` for UI-facing shapes |
 | Status | Phases 1 and 2 (health, auth, me, catalog, announcements, content, uploads) are implemented. Later phases still answer `501 { "error": "Not implemented yet" }` and replace their stubs in turn. |
@@ -138,6 +138,72 @@ Local testing needs a public HTTPS URL. Run `ngrok http 4000` (any tunnel works)
 **Order statuses.** `pending → paid → preparing → out_for_delivery → completed`, plus `cancelled`; pickup skips `out_for_delivery`.
 
 **Email.** Order confirmation and every status change go to the account email over Gmail SMTP (`SMTP_USER`, `SMTP_PASS`). Mail is best effort: an unconfigured or failing mailbox never fails an order request.
+
+## Phase 4 request and response bodies
+
+**Inventory.** All three routes need a staff or admin token; a customer gets `403`. Every adjustment is logged against the caller, so the log answers "who moved this stock".
+
+`GET /inventory/logs` → `200 { data, page, total }`, newest first. Filters: `?product_id&reason&from&to&page&limit`, `reason` ∈ `stock-in`, `sale`, `adjustment`, `spoilage`, `limit` 20 by default and 60 at most. A bad reason or product id is `400` with `details[].path`; each row carries `products: { name, unit, image_url }`.
+
+`GET /inventory/low-stock` → `200 { data }`: active products where `stock_qty <= reorder_level`, lowest first. The comparison is done by the `low_stock_products()` SQL function, because a PostgREST filter only compares against a literal, so the list never drifts from the truth.
+
+`POST /inventory/adjust` body `{ product_id, change_qty, reason }`. `change_qty` is a non-zero integer; `stock-in` must be positive and `spoilage` negative. → `201 { data: product, low_stock }`. An unknown product is `404`, an archived one `409`, and a change that would go below zero `409` without touching the row. Each success writes the `inventory_logs` row, broadcasts `stock` with the new quantity, and emails the admins when the product is now at or below `reorder_level`.
+
+**Low-stock email (FR-10).** After any deduction (`deduct_stock` when an order is paid or a COD order is confirmed) or adjustment that leaves a product at or below its reorder level, every active admin receives one email listing the affected products with their remaining quantity. Mail is best effort: a missing mailbox or SMTP failure is logged and never fails the stock change. `SMTP_HOST` and `SMTP_PORT` point the mailer at any relay for local testing; auth there is opt-in with `SMTP_AUTH=true`.
+
+## Phase 4 administration bodies
+
+**Users.** Admin only; staff and customers get `403`.
+
+`GET /users` → `200 { data, page, total }`, newest first, with `?q&role&is_active&page&limit` (`limit` 20 by default, 60 at most). `q` matches the name or phone, and every row is the profile plus `email` from the auth record. An unknown `role` or a non-boolean `is_active` is `400`.
+
+`PATCH /users/:id` body `{ role?, is_active? }` → `200 { data }`. Deactivation takes effect on that account's next request, which answers `403`. Changing your own role or deactivating yourself is `409`, an unknown id `404`, a bad role `400`.
+
+**Reports.** `GET /reports/summary` is for staff and admin (a customer gets `403`) and returns `{ sales, low_stock, recent_orders, counts }`. `sales` is `null` for staff; for admin it is `{ revenue, orders, average, days }` over the last 30 days.
+
+`GET /reports/:type` is admin only. `type` ∈ `sales`, `inventory`, `low-stock`, `top-products`, anything else `404`. Query `?from&to&format=json|csv`: a bare date includes that whole day, the default range is the last 30 days, and `from` on or after `to` is `400`. `format=csv` returns `text/csv` as an attachment named after the report. Sales and top products aggregate in SQL (`report_sales`, `report_top_products`) over paid, preparing, out-for-delivery and completed orders; the inventory report values stock at the current price and flags low rows; the low-stock report adds each shortfall.
+
+**Push.** `GET /push/public-key` (any signed-in account) → `{ key }`, with `null` when VAPID is not configured.
+
+`POST /push/subscribe` body `{ endpoint, keys: { p256dh, auth } }` → `201 { data: { id } }`. The endpoint is unique, so re-subscribing the same browser updates that row and moves it to the current account. `503` when VAPID is unset, `400` for a malformed subscription.
+
+`POST /push/unsubscribe` body `{ endpoint }` → `204`, scoped to the caller. `lib/push.js` sends with VAPID and deletes any subscription that answers `404` or `410`; sending a push is always best effort and never fails the request that triggered it.
+
+## Phase 5 push events (FR-21)
+
+Blueprint 6.2 as implemented. Each event is fired by the route that caused it, in the background: the response never waits for a push service, and a push failure is logged and swallowed, so one dead subscription can never turn a successful order, adjustment or announcement into an error. `lib/pushEvents.js` owns the payloads and the recipients; `lib/push.js` owns delivery.
+
+| Event | Fired by | Recipients |
+| --- | --- | --- |
+| Order status changed | `PATCH /orders/:id/status` | That order's customer |
+| New order placed | `POST /orders` | Active staff and admins |
+| Order paid | `POST /payments/webhook` | Active staff and admins |
+| New announcement published | `POST /announcements`, `PATCH /announcements/:id` | Active customers |
+| Low stock | Any deduction or adjustment that reaches `reorder_level`, with the low-stock email | Active admins |
+
+The payload is `{ title, body, url, tag }`, which is what `frontend/src/sw.js` reads. `url` is a frontend route the service worker opens on click (`/orders/:id`, `/admin/orders`, `/admin/inventory`, `/announcements`) and `tag` collapses repeats about the same subject in the tray.
+
+"New announcement published" means the row became live: `published_at` set and not in the future. A draft `POST` is silent, publishing a draft through `PATCH` notifies once, and editing an announcement that is already published does not notify again. A future-dated announcement is not pushed when its time arrives, because nothing schedules that; publish it, or accept the skipped push. A customer cancelling their own order does not push back to them.
+
+**Configuration.** `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (`npx web-push generate-vapid-keys`) and `VAPID_SUBJECT`. With VAPID unset every event is skipped silently and `GET /push/public-key` answers `null`, so the frontend can hide the opt-in.
+
+**Verifying locally.** `backend/test/push-events.test.mjs` runs every row above against the real routes and database, with `setPushTransport` recording the sends instead of reaching a push service. Confirming delivery on a device still needs the HTTPS deployment (blueprint section 10) and the iOS caveat there.
+
+## Phase 5 security pass
+
+Reviewed against the blueprint checklist (validation, no raw SQL, no secrets in code, CORS and rate limits) and pinned by `backend/test/security.test.mjs`.
+
+**Validation.** Every body, path parameter and query value is parsed before it reaches the database: zod bodies and params through the `validate` middleware, and the hand-read list filters (`from`/`to`, `status`, `reason`, `role`, `is_active`, `sort`, `minPrice`/`maxPrice`, `format`, `page`/`limit`) validated or whitelisted in the route. A bad value is `400 { error: "Validation failed", details: [{ path, message }] }`, where `details[].path` names the field: a malformed date is a `400`, not a PostgREST error surfacing as a `500`. An unknown report type is `404`, and a row that belongs to someone else is `404` rather than a `403` that would confirm it exists.
+
+**Limits.** `express.json` caps bodies at 1 MB (`413`) and `multer` caps an upload at one image of 5 MB. Rate limits are per IP: 300 requests a minute across the API, 5 sign-in attempts a minute, 5 password-reset requests an hour. A limited caller gets `429`, and the `RateLimit*` headers advertise the window and budget. Behind a proxy set `TRUST_PROXY` to the number of hops (Render: `1`), so the limiters key on the real client instead of the proxy; it is unset by default so a direct run cannot be throttled through a header the caller made up.
+
+**Origin.** CORS answers only the origins listed in `FRONTEND_URL` (comma-separated). Any other origin is `403 { error: "Origin not allowed" }` with no `Access-Control-Allow-Origin`, so a foreign page cannot read an API answer even with a stolen token. `helmet` sets the standard headers and `x-powered-by` is off.
+
+**Access.** Authentication is a Supabase access token in the `Authorization` header, verified per request and re-checked against `profiles.is_active`, so a deactivation applies to that account's next request. Every protected route answers `401` without a token and `403` for the wrong role: staff cannot reach users, reports, uploads, catalog writes or content writes. Reads and writes are scoped by `req.user.id`, never by an id taken from the body, so another customer's order, address or conversation is a `404`. The two `chat` stubs are the exception until Member 3 lands them: they hold no data and answer `501` to any caller.
+
+**Data and secrets.** Every database call goes through supabase-js builders or `rpc()` functions with named parameters; no SQL string is assembled in Node, and user input never reaches a filter expression unescaped (`q` is length-capped and stripped of PostgREST separators and LIKE wildcards). The only environment value a client ever sees is `VAPID_PUBLIC_KEY`; the service-role key, the PayMongo secret and webhook secret, the SMTP credentials and the VAPID private key stay in the server process. Only `.env.example` is tracked, with empty values, and `.gitignore` keeps real `.env` files out.
+
+**Known gap.** Push and webhook delivery cannot be exercised locally (see section 10), and `POST /payments/webhook` deliberately skips zod: its signature is verified over the raw bytes before its shape is read, and an unrecognised shape is acknowledged and ignored.
 
 ## Realtime (`backend/src/chat.js`)
 

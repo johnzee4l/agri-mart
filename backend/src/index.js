@@ -32,6 +32,15 @@ const allowedOrigins = (process.env.FRONTEND_URL ?? "http://localhost:5173")
   .filter(Boolean);
 
 app.disable("x-powered-by");
+
+/* Behind Render (or any proxy) the client IP arrives in X-Forwarded-For, and
+   express-rate-limit refuses to guess: without a trusted hop it keys every visitor on
+   the proxy and eventually 500s on the unexpected header. Off by default, so a direct
+   run cannot be limited by a header the caller made up. */
+if (process.env.TRUST_PROXY) {
+  app.set("trust proxy", Number(process.env.TRUST_PROXY) || 1);
+}
+
 app.use(helmet());
 app.use(
   cors({

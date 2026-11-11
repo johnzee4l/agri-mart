@@ -5,7 +5,9 @@ import { ApiError } from "../lib/errors.js";
 import { supabase } from "../lib/supabase.js";
 import { emitStock } from "../lib/realtime.js";
 import { sendOrderStatus } from "../lib/mailer.js";
+import { notifyLowStock } from "../lib/lowStock.js";
 import { getUserEmail } from "../lib/profile.js";
+import { notifyOrderPaid } from "../lib/pushEvents.js";
 
 /* FR-9. PayMongo webhook. The signature is an HMAC-SHA256 of "timestamp.rawBody"
    with the endpoint secret, sent in the Paymongo-Signature header as t, te (test)
@@ -67,7 +69,7 @@ paymentsRouter.post("/webhook", async (req, res) => {
 
   const { data: payment, error } = await supabase()
     .from("payments")
-    .select("id, order_id, status")
+    .select("id, order_id, method, status")
     .eq("paymongo_ref", intentId)
     .maybeSingle();
 
@@ -102,11 +104,13 @@ paymentsRouter.post("/webhook", async (req, res) => {
     .eq("id", payment.order_id)
     .eq("status", "pending");
 
-  const { error: stockError } = await supabase().rpc("deduct_stock", {
+  const { data: lowProducts, error: stockError } = await supabase().rpc("deduct_stock", {
     order_id: payment.order_id,
   });
 
   if (stockError) throw new ApiError(500, "Could not deduct stock");
+
+  notifyLowStock(lowProducts).catch(() => 0);
 
   const { data: items } = await supabase()
     .from("order_items")
@@ -129,6 +133,9 @@ paymentsRouter.post("/webhook", async (req, res) => {
     .maybeSingle();
 
   if (order) {
+    // Staff and admins learn that packing can start (blueprint 6.2).
+    notifyOrderPaid({ order, method: payment.method }).catch(() => 0);
+
     getUserEmail(order.user_id)
       .then((email) => sendOrderStatus({ to: email, order }))
       .catch(() => false);

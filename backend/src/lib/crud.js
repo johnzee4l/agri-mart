@@ -38,6 +38,15 @@ function stripUndefined(object) {
   return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== undefined));
 }
 
+/** Reacts to a write that already happened (announcements publish a push, FR-21).
+    Fire and forget: the row is saved, so a slow hook must not hold up the response
+    and a failing one must not turn the write into an error. */
+function runHook(hook, ...args) {
+  Promise.resolve()
+    .then(() => hook(...args))
+    .catch((error) => console.error("[crud] after-hook failed:", error?.message ?? error));
+}
+
 export function patchOf(schema) {
   return schema
     .partial()
@@ -57,6 +66,8 @@ export function crudRouter({
   defaultSort = [{ column: "created_at", ascending: false }],
   publicQuery = null,
   onCreate = null,
+  afterCreate = null,
+  afterUpdate = null,
   purgeGuard = null,
 }) {
   const router = Router();
@@ -157,6 +168,8 @@ export function crudRouter({
       const { data, error } = await supabase().from(table).insert(payload).select(select).single();
       if (error) throw new ApiError(400, error.message);
 
+      if (afterCreate) runHook(afterCreate, data, req);
+
       res.status(201).json({ data });
     },
   );
@@ -167,6 +180,17 @@ export function crudRouter({
     requireRole("admin"),
     validate({ params: idParams, body: updateSchema }),
     async (req, res) => {
+      // Only read the old row when a hook needs to compare against it.
+      let previous = null;
+      if (afterUpdate) {
+        const { data: before } = await supabase()
+          .from(table)
+          .select(select)
+          .eq("id", req.validated.params.id)
+          .maybeSingle();
+        previous = before ?? null;
+      }
+
       const { data, error } = await supabase()
         .from(table)
         .update(stripUndefined(req.validated.body))
@@ -176,6 +200,8 @@ export function crudRouter({
 
       if (error) throw new ApiError(400, error.message);
       if (!data) throw new ApiError(404, "Not found");
+
+      if (afterUpdate) runHook(afterUpdate, data, previous, req);
 
       res.json({ data });
     },
