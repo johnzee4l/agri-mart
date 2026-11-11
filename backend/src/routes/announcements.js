@@ -1,13 +1,52 @@
 import { Router } from "express";
-import { notImplemented } from "../middleware.js";
+import { z } from "zod";
 
-/* FR-12, FR-13. Member 2 Phase 2: published announcements (pinned first) plus
-   admin draft/publish through published_at. */
+import { crudRouter, patchOf } from "../lib/crud.js";
+
+/* FR-12, FR-13. Draft and publish through published_at: null is a draft, a past
+   timestamp is published. Public reads see published rows only, pinned first;
+   an admin token also sees drafts. */
+
+const publishedAt = z
+  .string()
+  .trim()
+  .nullable()
+  .optional()
+  .refine((value) => value == null || !Number.isNaN(Date.parse(value)), {
+    message: "Send an ISO date, or null for a draft.",
+  });
+
+const announcementBody = z.object({
+  title: z.string().trim().min(1, "Enter a title.").max(200),
+  body: z.string().trim().min(1, "Write the announcement.").max(5000),
+  is_pinned: z.boolean().optional(),
+  published_at: publishedAt,
+});
+
 export const announcementsRouter = Router();
 
-announcementsRouter.get("/", notImplemented);
-announcementsRouter.post("/", notImplemented);
-announcementsRouter.patch("/:id", notImplemented);
-announcementsRouter.delete("/:id", notImplemented);
-announcementsRouter.post("/:id/restore", notImplemented);
-announcementsRouter.delete("/:id/purge", notImplemented);
+announcementsRouter.use(
+  "/",
+  crudRouter({
+    table: "announcements",
+    createSchema: announcementBody,
+    updateSchema: patchOf(announcementBody),
+    searchColumns: ["title", "body"],
+    defaultSort: [
+      { column: "is_pinned", ascending: false },
+      { column: "published_at", ascending: false },
+    ],
+    sortable: {
+      newest: { column: "published_at", ascending: false },
+      oldest: { column: "published_at", ascending: true },
+    },
+    // Only scheduled and published rows are public; a draft has published_at null.
+    publicQuery: (query) =>
+      query.not("published_at", "is", null).lte("published_at", new Date().toISOString()),
+    // A new announcement is a draft until published_at is supplied.
+    onCreate: (req) => ({
+      author_id: req.user.id,
+      published_at: req.validated.body.published_at ?? null,
+    }),
+  }),
+);

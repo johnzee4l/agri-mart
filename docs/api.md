@@ -5,7 +5,7 @@
 | Version | 0.2 (Phase 1 implemented) |
 | Owner | Member 2 (`backend/src`) |
 | Source | `blueprint.md` sections 6 and 7, plus `designtokens.md` for UI-facing shapes |
-| Status | Phase 1 (health, auth, me) is implemented. Later phases still answer `501 { "error": "Not implemented yet" }` and replace their stubs in turn. |
+| Status | Phases 1 and 2 (health, auth, me, catalog, announcements, content, uploads) are implemented. Later phases still answer `501 { "error": "Not implemented yet" }` and replace their stubs in turn. |
 
 **Rule:** anyone changing an endpoint updates this file in the same PR.
 
@@ -84,6 +84,30 @@ Auth answers: `400` validation (with `details[].path`), `401` bad credentials or
 | `DELETE /me/addresses/:id` | — | `204`, sets `deleted_at` (archive) |
 
 Rules: the first saved address becomes the default; setting `is_default: true` clears the previous default; archiving the default promotes the newest remaining address. An address owned by another account answers `404`, not `403`.
+
+## Phase 2 request and response bodies
+
+**Catalog.** `GET /products` is public; writes need an admin token. Archived rows are hidden from every public call.
+
+| Query | Meaning |
+| --- | --- |
+| `q` | Searches name, brand and description |
+| `category` | Category id (exact) |
+| `brand` | Partial, case-insensitive |
+| `minPrice` · `maxPrice` | Numeric bounds on `price` |
+| `sort` | `newest` (default), `price_asc`, `price_desc`, `name` |
+| `page` · `limit` | Page starts at 1; `limit` defaults to 12, max 60 |
+| `archived` | `true` lists archived rows. Admin only, otherwise `403` |
+
+`GET /products` → `200 { data, page, total }`. `GET /products/:id` → `200 { data }`, or `404` when archived (admins still see archived rows).
+
+`POST /products` body: `{ name, price, stock_qty, category_id?, brand?, unit?, description?, reorder_level?, image_url?, is_featured? }`. `PATCH` takes any subset. `DELETE /products/:id` archives (`204`); `POST /products/:id/restore` restores (`200 { data }`); `DELETE /products/:id/purge` is permanent (`204`) and answers `409` if the product appears in `order_items`, or if it was never archived. Categories follow the same pattern with `{ name, description? }`, and a category with products cannot be purged.
+
+**Announcements.** `GET /announcements` is public and returns published rows only (`published_at` in the past), pinned first then newest. An admin token also sees drafts. `POST` body `{ title, body, is_pinned?, published_at? }` creates a draft when `published_at` is null or omitted; setting it publishes. `PATCH` with `published_at: null` unpublishes. Archive, restore and purge as above.
+
+**Content.** `GET /content` → `200 { data: { home_hero, home_banners, about, contact, store_location, delivery_rates } }`, a map of key to jsonb value. `PUT /content/:key` (admin) body `{ value }` upserts one key; unknown keys answer `404`.
+
+**Uploads.** `POST /uploads` (admin) is `multipart/form-data` with one `file` field. JPEG, PNG, WebP, GIF or AVIF, 5 MB maximum. → `201 { data: { url, path } }` with the public URL of the object in `public-images`.
 
 ## Realtime (`backend/src/chat.js`)
 
