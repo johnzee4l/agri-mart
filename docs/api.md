@@ -2,10 +2,10 @@
 
 | Field | Value |
 | --- | --- |
-| Version | 0.1 (Phase 1 skeleton) |
+| Version | 0.3 (Phases 1–3 implemented) |
 | Owner | Member 2 (`backend/src`) |
 | Source | `blueprint.md` sections 6 and 7, plus `designtokens.md` for UI-facing shapes |
-| Status | Every endpoint below currently answers `501 { "error": "Not implemented yet" }`. Each phase replaces its stubs. |
+| Status | Phases 1 and 2 (health, auth, me, catalog, announcements, content, uploads) are implemented. Later phases still answer `501 { "error": "Not implemented yet" }` and replace their stubs in turn. |
 
 **Rule:** anyone changing an endpoint updates this file in the same PR.
 
@@ -56,6 +56,88 @@
 | `GET /chat/messages` | C, S | Thread history; customers read only their own conversation | 4 |
 | `GET /push/public-key` | C, S | VAPID public key | 4 or 5 (C1) |
 | `POST /push/subscribe` · `POST /push/unsubscribe` | C, S | Push subscription management | 4 or 5 (C1) |
+
+## Phase 1 request and response bodies
+
+**Auth.** Supabase Auth sits behind these routes; the browser never holds a Supabase key.
+
+| Endpoint | Body | Success |
+| --- | --- | --- |
+| `POST /auth/register` | `{ email, password, full_name, phone? }` | `201 { data: { id, email }, message }`. Profile row comes from the `handle_new_user` trigger |
+| `POST /auth/login` | `{ email, password }` | `200 { access_token, refresh_token, expires_at, profile }` |
+| `POST /auth/refresh` | `{ refresh_token }` | `200 { access_token, refresh_token, expires_at }` |
+| `POST /auth/logout` | — (Bearer) | `204`, all sessions for the account revoked |
+| `POST /auth/forgot-password` | `{ email }` | `202 { message }` whether or not the address exists |
+| `POST /auth/reset-password` | `{ access_token, password }` | `200 { message }` |
+
+Auth answers: `400` validation (with `details[].path`), `401` bad credentials or expired session, `403` deactivated account, `409` email already registered, `429` more than 5 login attempts per IP per minute (or 5 reset requests per hour).
+
+**Profile and addresses.** All require the Bearer token and are scoped to the caller.
+
+| Endpoint | Body | Success |
+| --- | --- | --- |
+| `GET /me` | — | `200 { data: profile }` (includes `email`) |
+| `PATCH /me` | `{ full_name?, phone? }` | `200 { data: profile }` |
+| `GET /me/addresses` | — | `200 { data, page, total }`, default first, archived excluded |
+| `POST /me/addresses` | `{ street, barangay, municipality, province, latitude?, longitude?, is_default? }` | `201 { data: address }` |
+| `PATCH /me/addresses/:id` | Any of the fields above | `200 { data: address }` |
+| `DELETE /me/addresses/:id` | — | `204`, sets `deleted_at` (archive) |
+
+Rules: the first saved address becomes the default; setting `is_default: true` clears the previous default; archiving the default promotes the newest remaining address. An address owned by another account answers `404`, not `403`.
+
+## Phase 2 request and response bodies
+
+**Catalog.** `GET /products` is public; writes need an admin token. Archived rows are hidden from every public call.
+
+| Query | Meaning |
+| --- | --- |
+| `q` | Searches name, brand and description |
+| `category` | Category id (exact) |
+| `brand` | Partial, case-insensitive |
+| `minPrice` · `maxPrice` | Numeric bounds on `price` |
+| `sort` | `newest` (default), `price_asc`, `price_desc`, `name` |
+| `page` · `limit` | Page starts at 1; `limit` defaults to 12, max 60 |
+| `archived` | `true` lists archived rows. Admin only, otherwise `403` |
+
+`GET /products` → `200 { data, page, total }`. `GET /products/:id` → `200 { data }`, or `404` when archived (admins still see archived rows).
+
+`POST /products` body: `{ name, price, stock_qty, category_id?, brand?, unit?, description?, reorder_level?, image_url?, is_featured? }`. `PATCH` takes any subset. `DELETE /products/:id` archives (`204`); `POST /products/:id/restore` restores (`200 { data }`); `DELETE /products/:id/purge` is permanent (`204`) and answers `409` if the product appears in `order_items`, or if it was never archived. Categories follow the same pattern with `{ name, description? }`, and a category with products cannot be purged.
+
+**Announcements.** `GET /announcements` is public and returns published rows only (`published_at` in the past), pinned first then newest. An admin token also sees drafts. `POST` body `{ title, body, is_pinned?, published_at? }` creates a draft when `published_at` is null or omitted; setting it publishes. `PATCH` with `published_at: null` unpublishes. Archive, restore and purge as above.
+
+**Content.** `GET /content` → `200 { data: { home_hero, home_banners, about, contact, store_location, delivery_rates } }`, a map of key to jsonb value. `PUT /content/:key` (admin) body `{ value }` upserts one key; unknown keys answer `404`.
+
+**Uploads.** `POST /uploads` (admin) is `multipart/form-data` with one `file` field. JPEG, PNG, WebP, GIF or AVIF, 5 MB maximum. → `201 { data: { url, path } }` with the public URL of the object in `public-images`.
+
+## Phase 3 request and response bodies
+
+**Orders.** Every route needs the Bearer token; staff and admin see all orders, customers only their own.
+
+`POST /orders` body: `{ items: [{ product_id, qty }], fulfillment_type: "delivery" | "pickup", address_id?, method: "cod" | "gcash" | "card" | "grab_pay" }`.
+
+Prices, stock and the delivery fee are decided on the server; nothing money-related is read from the body. Repeats of one product are merged before the stock check, and a short line answers `400` with `details[].path` such as `items.0.qty`. Archived products are refused the same way. Delivery needs an address the caller owns (`404` when it is not theirs) and pickup stores `address_id: null` with a fee of `0`.
+
+Delivery fee: `base_fee + per_km × haversine(store_location, address pin)`, both read from `site_content`, rounded to the centavo. An address without a pin pays `base_fee`; a missing `delivery_rates` or store pin with a pinned address answers `503`.
+
+Online methods create the PayMongo intent **before** the order row is written, so a provider failure cannot leave an orphan order: `503` when the secret key is not configured, `502` when PayMongo refuses. The intent is created for the full total in centavos with `capture_type: automatic`; the browser attaches the payment method with the returned `client_key`.
+
+→ `201 { order: { …, order_items }, payment: { intent_id, client_key } }`, with `payment: null` for COD. The `payments` row starts at `pending` (`paymongo_ref` holds the intent id).
+
+`GET /orders` → `200 { data, page, total }`, newest first, accepting `?status&from&to&page&limit`; `limit` defaults to 20 and caps at 60. `GET /orders/:id` → `200 { data }` with `order_items` (plus each product's `name`, `unit`, `image_url`) and `payments`. Another account's order answers `404`, never `403`.
+
+`POST /orders/:id/cancel` → `200 { data }` while the order is `pending` (otherwise `409`), and its pending payment row becomes `failed`.
+
+`PATCH /orders/:id/status` (staff, admin) body `{ status }`. Allowed moves: `pending → paid | cancelled`, `paid → preparing | cancelled`, `preparing → out_for_delivery | completed | cancelled`, `out_for_delivery → completed`. COD may skip the paid step with `pending → preparing`; online orders may not. Pickup orders skip `out_for_delivery` (`400`). Any other move is `409`. Reaching `preparing` calls `deduct_stock` once for COD, and COD is marked `paid` with `paid_at` at `completed`. Every change emails the customer, and a deduction broadcasts `stock`.
+
+**PayMongo webhook.** `POST /payments/webhook`, no token. The signature is HMAC-SHA256 over `"<t>.<raw body>"` with `PAYMONGO_WEBHOOK_SECRET`, compared in constant time against `te` (test) or `li` (live) from `Paymongo-Signature`. A missing secret answers `503`; a bad signature, a wrong timestamp or a body changed after signing answers `401`.
+
+Only `payment` resources act. `payment_intent_id` finds the `payments` row through `paymongo_ref`: success marks the payment `paid`, moves a `pending` order to `paid` and calls `deduct_stock` once; a failure marks the payment `failed` and leaves the order `pending` for another attempt. Repeated deliveries of a paid payment and unrelated events are acknowledged with `200` so PayMongo stops retrying; unknown intents are ignored the same way.
+
+Local testing needs a public HTTPS URL. Run `ngrok http 4000` (any tunnel works) and register `https://<tunnel>/api/payments/webhook` for `payment.paid` and `payment.failed` in the PayMongo dashboard, then copy its signing secret into `PAYMONGO_WEBHOOK_SECRET`.
+
+**Order statuses.** `pending → paid → preparing → out_for_delivery → completed`, plus `cancelled`; pickup skips `out_for_delivery`.
+
+**Email.** Order confirmation and every status change go to the account email over Gmail SMTP (`SMTP_USER`, `SMTP_PASS`). Mail is best effort: an unconfigured or failing mailbox never fails an order request.
 
 ## Realtime (`backend/src/chat.js`)
 

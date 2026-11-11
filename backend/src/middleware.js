@@ -1,16 +1,11 @@
 import { ZodError } from "zod";
 import { supabase } from "./lib/supabase.js";
+import { ApiError } from "./lib/errors.js";
+import { getProfile } from "./lib/profile.js";
 
 /* Middleware (blueprint 6.5): auth, requireRole, zod validate, error handling. */
 
-export class ApiError extends Error {
-  constructor(status, message, details) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-    this.details = details;
-  }
-}
+export { ApiError };
 
 /** Standard placeholder for an endpoint whose phase has not landed. */
 export function notImplemented(req, _res, next) {
@@ -27,15 +22,11 @@ export async function auth(req, _res, next) {
     const { data, error } = await supabase().auth.getUser(token);
     if (error || !data?.user) throw new ApiError(401, "Invalid or expired session");
 
-    const { data: profile, error: profileError } = await supabase()
-      .from("profiles")
-      .select("id, full_name, phone, role, is_active")
-      .eq("id", data.user.id)
-      .single();
-
-    if (profileError) throw new ApiError(500, "Could not load profile");
+    const profile = await getProfile(data.user.id);
     if (!profile.is_active) throw new ApiError(403, "Account is deactivated");
 
+    // Kept for /auth/logout, which revokes this exact session.
+    req.accessToken = token;
     req.user = { ...data.user, ...profile };
     next();
   } catch (error) {

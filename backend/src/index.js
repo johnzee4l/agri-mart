@@ -5,8 +5,9 @@ import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { Server } from "socket.io";
 
-import { errorHandler, notFound } from "./middleware.js";
+import { ApiError, errorHandler, notFound } from "./middleware.js";
 import { initChat } from "./chat.js";
+import { setRealtime } from "./lib/realtime.js";
 
 import { authRouter } from "./routes/auth.js";
 import { meRouter } from "./routes/me.js";
@@ -36,7 +37,8 @@ app.use(
   cors({
     origin(origin, callback) {
       if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error("Origin not allowed by CORS"));
+      // A rejected origin is a client error, not a server fault.
+      return callback(new ApiError(403, "Origin not allowed"));
     },
   }),
 );
@@ -48,7 +50,15 @@ app.use(
     legacyHeaders: false,
   }),
 );
-app.use(express.json({ limit: "1mb" }));
+// Keep the raw body: the PayMongo webhook verifies its signature over these bytes.
+app.use(
+  express.json({
+    limit: "1mb",
+    verify: (req, _res, buffer) => {
+      req.rawBody = buffer;
+    },
+  }),
+);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "agrimart-api", time: new Date().toISOString() });
@@ -77,11 +87,15 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: allowedOrigins },
 });
+setRealtime(io);
 initChat(io);
 
 const port = Number(process.env.PORT ?? 4000);
 server.listen(port, () => {
-  console.log(`[api] listening on http://localhost:${port}`);
+  const address = server.address();
+  // PORT=0 asks the OS for a free port, so log the one actually bound.
+  const boundPort = typeof address === "object" && address ? address.port : port;
+  console.log(`[api] listening on http://localhost:${boundPort}`);
 });
 
 export { app, server, io };
