@@ -22,6 +22,11 @@ export function AuthProvider({ children }) {
     }
     setToken(null);
     setProfile(null);
+
+    // Cached orders and /me are personal, so they leave with the session.
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.controller?.postMessage({ type: "CLEAR_PRIVATE" });
+    }
   }, []);
 
   const refreshSession = useCallback(async () => {
@@ -74,6 +79,14 @@ export function AuthProvider({ children }) {
     return data.profile ?? null;
   }, []);
 
+  /* FR-15. Saves the profile and keeps the context in sync with the API. */
+  const saveProfile = useCallback(async (patch) => {
+    const data = await api.patch("/me", patch);
+    const next = data?.data ?? data ?? {};
+    setProfile((current) => ({ ...(current ?? {}), ...next }));
+    return next;
+  }, []);
+
   /* FR-14. Signup, forgot and reset never sign the user in directly. */
   const register = useCallback(
     (payload) => api.post("/auth/register", payload),
@@ -97,12 +110,13 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(profile),
       loading,
       login,
+      saveProfile,
       register,
       forgotPassword,
       resetPassword,
       logout,
     }),
-    [profile, loading, login, register, forgotPassword, resetPassword, logout],
+    [profile, loading, login, saveProfile, register, forgotPassword, resetPassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

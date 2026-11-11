@@ -1,6 +1,8 @@
 /* Fetch wrapper for the Node API (blueprint 6.5).
    Base URL + Bearer token, one refresh on 401, standard { error, details } errors. */
 
+import { markSynced } from "./useOnline.js";
+
 export const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
 
 const TOKEN_KEY = "agrimart.access_token";
@@ -56,6 +58,8 @@ async function request(path, { method = "GET", body, retry = true, signal } = {}
       payload?.details,
     );
   }
+
+  markSynced();
 
   return payload;
 }

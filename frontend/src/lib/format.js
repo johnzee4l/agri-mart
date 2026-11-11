@@ -26,6 +26,18 @@ export function asList(payload) {
   return Array.isArray(payload.data) ? payload.data : [];
 }
 
+const manilaClock = new Intl.DateTimeFormat("en-PH", {
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Asia/Manila",
+});
+
+/** "14:05" in Manila time, used by the offline "Updated ..." caption. */
+export function formatClock(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : manilaClock.format(date);
+}
+
 export function unwrap(payload) {
   if (!payload) return null;
   return payload.data ?? payload;

@@ -3,11 +3,15 @@ import { m } from "motion/react";
 import { formatPHP } from "@/lib/format.js";
 import StockIndicator from "./StockIndicator.jsx";
 import AddToCartButton from "./AddToCartButton.jsx";
+import { useLiveProduct } from "@/lib/liveStock.jsx";
+import StaleLabel from "./StaleLabel.jsx";
 
 /* The only catalog card (designtokens.md 8.5, 11). The image carries a shared
    layoutId so the tile morphs into the detail image (9.3). The add button sits
    outside the link, because a button cannot live inside an anchor. */
-export default function ProductCard({ product }) {
+export default function ProductCard({ product: incoming }) {
+  const { product, changedAt } = useLiveProduct(incoming);
+
   return (
     <div className="group flex flex-col gap-3 rounded-xl bg-surface p-3">
       <Link to={`/products/${product.id}`} className="flex flex-col gap-3">
@@ -44,8 +48,9 @@ export default function ProductCard({ product }) {
           <span className="text-body-md font-semibold text-fg tabular-nums">
             {formatPHP(product.price)}
           </span>
-          <StockIndicator product={product} />
+          <StockIndicator product={product} changedAt={changedAt} />
         </div>
+        <StaleLabel />
         <AddToCartButton product={product} size="sm" className="w-full" />
       </div>
     </div>

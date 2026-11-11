@@ -10,15 +10,18 @@ import "./styles/theme.css";
 import App from "./App.jsx";
 import { AuthProvider } from "./lib/auth.jsx";
 import { CartProvider } from "./lib/cart.jsx";
+import { LiveStockProvider } from "./lib/liveStock.jsx";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <LazyMotion features={domAnimation} strict>
       <BrowserRouter>
         <AuthProvider>
-          <CartProvider>
-            <App />
-          </CartProvider>
+          <LiveStockProvider>
+            <CartProvider>
+              <App />
+            </CartProvider>
+          </LiveStockProvider>
         </AuthProvider>
       </BrowserRouter>
     </LazyMotion>

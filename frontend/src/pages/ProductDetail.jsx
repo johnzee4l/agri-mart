@@ -5,13 +5,16 @@ import AddToCartButton from "../components/AddToCartButton.jsx";
 import { EmptyState, ErrorNotice, LoadingLines } from "../components/AsyncState.jsx";
 import { formatPHP, unwrap } from "@/lib/format.js";
 import { useApi } from "@/lib/useApi.js";
+import { useLiveProduct } from "@/lib/liveStock.jsx";
+import StaleLabel from "../components/StaleLabel.jsx";
 
 /* FR-1. Split canvas: image left, details right. The image shares its layoutId
    with the product tile so the transition is continuous (designtokens 9.3). */
 export default function ProductDetail() {
   const { id } = useParams();
   const { data, error, loading, reload } = useApi(id ? `/products/${id}` : null);
-  const product = unwrap(data);
+  const live = useLiveProduct(unwrap(data));
+  const product = live.product;
 
   const shell = "mx-auto w-full max-w-[var(--container-content)] px-4 py-10 lg:px-10 lg:py-16";
 
@@ -81,11 +84,13 @@ export default function ProductDetail() {
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
-            <StockIndicator product={product} />
+            <StockIndicator product={product} changedAt={live.changedAt} />
             {product.unit ? (
               <span className="text-body-sm text-fg-muted">Sold per {product.unit}</span>
             ) : null}
           </div>
+
+          <StaleLabel />
 
           {product.description ? (
             <p className="max-w-[65ch] text-body-md text-fg-muted">{product.description}</p>

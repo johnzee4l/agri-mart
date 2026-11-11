@@ -7,6 +7,7 @@ import { useCart } from "@/lib/cart.jsx";
 import { useContent } from "@/lib/content.js";
 import { useApi } from "@/lib/useApi.js";
 import { asList, formatPHP } from "@/lib/format.js";
+import { useOnline } from "@/lib/useOnline.js";
 import { estimateDeliveryFee } from "@/lib/fee.js";
 import { PAYMENT_METHODS, readOrderCreation } from "@/lib/orders.js";
 import {
@@ -63,6 +64,7 @@ export default function Checkout() {
   const content = useContent();
   const addresses = useApi("/me/addresses");
   const navigate = useNavigate();
+  const online = useOnline();
 
   const [step, setStep] = useState(0);
   const [fulfillment, setFulfillment] = useState("delivery");
@@ -141,6 +143,11 @@ export default function Checkout() {
   };
 
   async function placeOrder() {
+    if (!online) {
+      setFormError("You are offline. Reconnect before placing the order.");
+      return;
+    }
+
     setPlacing(true);
     setFormError(null);
 
@@ -506,9 +513,20 @@ export default function Checkout() {
                 </p>
               ) : null}
 
-              <Button size="lg" loading={placing} onClick={placeOrder} className="self-start">
+              <Button
+                size="lg"
+                loading={placing}
+                disabled={!online}
+                onClick={placeOrder}
+                className="self-start"
+              >
                 Place order
               </Button>
+              {online ? null : (
+                <p role="status" className="text-caption font-semibold text-warning-text">
+                  You are offline. Reconnect to place this order; nothing has been charged.
+                </p>
+              )}
               <p className="text-caption text-fg-subtle">
                 Prices, stock and the delivery fee are confirmed by the store when the order is placed.
               </p>

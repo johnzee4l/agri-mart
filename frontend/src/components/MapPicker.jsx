@@ -1,31 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { MapPin } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn.js";
+import { DEFAULT_CENTER, MAPS_KEY, loadMaps } from "@/lib/maps.js";
 import Input from "./ui/Input.jsx";
 
 /* FR-19. Pin the delivery location. Loads the Maps JS API directly with the key from
    VITE_GOOGLE_MAPS_KEY; without a key it falls back to coordinates so checkout still
    works. The map is a media element (radius-lg, no frame, designtokens 8.5). */
-
-const KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY;
-const DEFAULT_CENTER = { lat: 14.5995, lng: 120.9842 };
-
-let loader = null;
-
-function loadMaps(key) {
-  if (window.google?.maps) return Promise.resolve(window.google.maps);
-  if (!loader) {
-    loader = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&loading=async`;
-      script.async = true;
-      script.onload = () => resolve(window.google.maps);
-      script.onerror = () => reject(new Error("Google Maps could not load."));
-      document.head.appendChild(script);
-    });
-  }
-  return loader;
-}
 
 function usable(point) {
   return Boolean(point) && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng));
@@ -48,7 +29,7 @@ export default function MapPicker({ value, onChange, center, className }) {
   }, [onChange]);
 
   useEffect(() => {
-    if (!KEY) return undefined;
+    if (!MAPS_KEY) return undefined;
     const host = container.current;
     if (!host) return undefined;
 
@@ -61,7 +42,7 @@ export default function MapPicker({ value, onChange, center, className }) {
     let cancelled = false;
     let pin = null;
 
-    loadMaps(KEY)
+    loadMaps()
       .then((maps) => {
         if (cancelled) return;
 
@@ -101,7 +82,7 @@ export default function MapPicker({ value, onChange, center, className }) {
     map.current?.panTo(position);
   }, [value]);
 
-  if (!KEY) {
+  if (!MAPS_KEY) {
     return (
       <div className={cn("flex flex-col gap-3", className)}>
         <p className="rounded-md bg-muted p-3 text-caption text-fg-muted">
