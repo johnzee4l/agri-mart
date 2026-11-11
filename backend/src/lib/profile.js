@@ -16,6 +16,20 @@ export async function getProfile(userId) {
   return data;
 }
 
+/** Every active admin, for the low-stock alert (FR-10). */
+export async function getAdminEmails() {
+  const { data, error } = await supabase()
+    .from("profiles")
+    .select("id")
+    .eq("role", "admin")
+    .eq("is_active", true);
+
+  if (error) throw new ApiError(500, "Could not load the admin list");
+
+  const emails = await Promise.all((data ?? []).map((admin) => getUserEmail(admin.id)));
+  return [...new Set(emails.filter(Boolean))];
+}
+
 /** The address lives in auth.users, not profiles. Mail is best effort. */
 export async function getUserEmail(userId) {
   const { data, error } = await supabase().auth.admin.getUserById(userId);
