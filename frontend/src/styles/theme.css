@@ -140,3 +140,18 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Live update flash (designtokens 9.1, 13). Reduced motion turns it into an instant
+   colour change through the global rule above. */
+@keyframes stock-flash {
+  from {
+    background-color: var(--primary-subtle);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+@utility animate-stock-flash {
+  animation: stock-flash var(--duration-stock-flash) var(--ease-breathe);
+}

@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
+import { m } from "motion/react";
+import { List, X } from "@phosphor-icons/react";
 import { api } from "@/lib/api.js";
 import { useAuth } from "@/lib/auth.jsx";
+import { useCart } from "@/lib/cart.jsx";
 import { uiIcons } from "@/styles/icons.js";
+import { duration, ease, spring } from "@/styles/tokens/motion.js";
 import Button from "./ui/Button.jsx";
 
 const links = [
@@ -18,7 +22,15 @@ const ErrorIcon = uiIcons.error;
 
 export default function Navbar() {
   const { profile, role, logout } = useAuth();
+  const { count } = useCart();
   const [health, setHealth] = useState("checking");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const location = useLocation();
+
+  // The primary links are hidden below md, so the disclosure menu carries them there.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     let active = true;
@@ -58,12 +70,39 @@ export default function Navbar() {
         </nav>
 
         <div className="ml-auto flex items-center gap-3">
+          <button
+            type="button"
+            aria-expanded={menuOpen}
+            aria-controls="mobile-nav"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            onClick={() => setMenuOpen((open) => !open)}
+            className="flex size-[var(--control-sm)] items-center justify-center rounded-full text-fg-muted hover:bg-muted md:hidden"
+          >
+            {menuOpen ? (
+              <X size={22} aria-hidden="true" />
+            ) : (
+              <List size={22} aria-hidden="true" />
+            )}
+          </button>
+
           <Link
             to="/cart"
-            className="flex items-center gap-2 rounded-full px-3 py-2 text-label font-semibold text-fg-muted hover:bg-muted"
+            className="relative flex items-center gap-2 rounded-full px-3 py-2 text-label font-semibold text-fg-muted hover:bg-muted"
           >
             <CartIcon size={20} aria-hidden="true" />
             <span className="hidden sm:inline">Cart</span>
+            {count > 0 ? (
+              <m.span
+                key={count}
+                initial={{ scale: 1 }}
+                animate={{ scale: [1, 1.18, 1] }}
+                transition={spring.snappy}
+                aria-label={`${count} items in cart`}
+                className="absolute -top-0.5 -right-0.5 flex size-5 items-center justify-center rounded-full bg-primary text-caption font-semibold text-on-primary tabular-nums"
+              >
+                {count}
+              </m.span>
+            ) : null}
           </Link>
 
           {canUseAdmin ? (
@@ -97,6 +136,35 @@ export default function Navbar() {
           )}
         </div>
       </div>
+
+      {menuOpen ? (
+          <m.nav
+            id="mobile-nav"
+            aria-label="Mobile"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            transition={{ duration: duration.base, ease: ease.standard }}
+            className="overflow-hidden bg-canvas md:hidden"
+          >
+            <ul className="mx-auto flex w-full max-w-[var(--container-wide)] flex-col gap-1 px-4 pb-3">
+              {links.map((link) => (
+                <li key={link.to}>
+                  <NavLink
+                    to={link.to}
+                    end={link.to === "/"}
+                    className={({ isActive }) =>
+                      `block rounded-md px-3 py-2.5 text-label font-semibold ${
+                        isActive ? "bg-primary-subtle text-primary-text" : "text-fg-muted"
+                      }`
+                    }
+                  >
+                    {link.label}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </m.nav>
+        ) : null}
 
       <p className="mx-auto flex w-full max-w-[var(--container-wide)] items-center gap-1.5 px-4 pb-2 text-caption text-fg-muted lg:px-10">
         {health === "online" ? (
