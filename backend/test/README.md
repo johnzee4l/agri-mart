@@ -41,6 +41,22 @@ totals, CSV download headers, bad input, and push subscription storage, re-subsc
 and owner-scoped unsubscribe. Push sending needs a real push service, so it is not
 sent here.
 
+`security.test.mjs` covers the Phase 5 hardening pass: helmet headers and no
+`x-powered-by`, CORS allowing the `FRONTEND_URL` origin and refusing a foreign one,
+`401` on every protected route without a token, `403` for staff on admin-only routes,
+`400` with a field path for malformed bodies and queries (including unparseable JSON and
+a body over 1 MB), and both rate limiters — the strict login one after five wrong
+passwords, and the global one after 300 requests in a minute. The "no raw SQL, no secrets
+in code" half of the pass is a source audit, written up in `docs/api.md`.
+
+`push-events.test.mjs` covers Phase 5 push events (FR-21): a new order pushes to staff
+and admins only, an order status change pushes to that customer, a paid order pushes to
+staff and admins, low stock pushes to admins only, and an announcement pushes to
+subscribed customers when it becomes live — once, never for a draft and never again on
+a later edit. Subscriptions are stored through the real route and recipients are
+resolved from `profiles` and `push_subscriptions`, but `setPushTransport` replaces the
+network send with a recorder, because a local run cannot reach a push service.
+
 ```bash
 npm test            # runs all three files in order
 ```

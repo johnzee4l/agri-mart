@@ -31,7 +31,19 @@ function badRequest(path, message) {
   return new ApiError(400, "Validation failed", [{ path, message }]);
 }
 
-inventoryRouter.get("/logs", async (req, res) => {
+/* `from`/`to` go straight into the PostgREST filter, so a malformed date has to be a
+   400 here instead of a database error that reads like a server fault. */
+const dateParam = z
+  .string()
+  .trim()
+  .refine((value) => !Number.isNaN(Date.parse(value)), {
+    message: "Use an ISO date, for example 2026-11-01.",
+  })
+  .optional();
+
+const rangeQuery = z.object({ from: dateParam, to: dateParam });
+
+inventoryRouter.get("/logs", validate({ query: rangeQuery }), async (req, res) => {
   const { page, limit } = readPaging(req.query);
   const reason = req.query.reason ? String(req.query.reason) : null;
 

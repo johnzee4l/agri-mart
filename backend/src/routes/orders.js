@@ -10,6 +10,7 @@ import { emitStock } from "../lib/realtime.js";
 import { sendOrderConfirmation, sendOrderStatus } from "../lib/mailer.js";
 import { notifyLowStock } from "../lib/lowStock.js";
 import { getUserEmail } from "../lib/profile.js";
+import { notifyNewOrder, notifyOrderStatus } from "../lib/pushEvents.js";
 
 /* FR-5, FR-8, FR-9. Orders. Prices, stock, the delivery fee and item availability
    are all decided here, never from the request body (blueprint 6.4). */
@@ -35,6 +36,18 @@ const TRANSITIONS = {
 };
 
 const ONLINE_METHODS = new Set(["gcash", "card", "grab_pay"]);
+
+/* `from`/`to` go straight into the PostgREST filter, so a malformed date has to be a
+   400 here instead of a database error that reads like a server fault. */
+const dateParam = z
+  .string()
+  .trim()
+  .refine((value) => !Number.isNaN(Date.parse(value)), {
+    message: "Use an ISO date, for example 2026-11-01.",
+  })
+  .optional();
+
+const rangeQuery = z.object({ from: dateParam, to: dateParam });
 
 function isStaff(user) {
   return user?.role === "admin" || user?.role === "staff";
@@ -289,6 +302,13 @@ ordersRouter.post(
       items: lines,
     }).catch(() => false);
 
+    // The counter hears about a new order without refreshing its list.
+    notifyNewOrder({
+      order,
+      method,
+      itemCount: lines.reduce((sum, line) => sum + line.quantity, 0),
+    }).catch(() => 0);
+
     res.status(201).json({
       order: { ...order, order_items: lines.map(({ name, ...line }) => ({ ...line, products: { name } })) },
       payment: intent ? { intent_id: intent.id, client_key: intent.clientKey } : null,
@@ -296,7 +316,7 @@ ordersRouter.post(
   },
 );
 
-ordersRouter.get("/", async (req, res) => {
+ordersRouter.get("/", validate({ query: rangeQuery }), async (req, res) => {
   const { page, limit } = readPaging(req.query);
   const status = req.query.status ? String(req.query.status) : null;
 
@@ -403,6 +423,10 @@ ordersRouter.patch(
     if (deducted) await broadcastStock(order.id);
 
     const updated = await loadOrder(order.id, req.user);
+
+    // Order status changed → the customer (blueprint 6.2).
+    notifyOrderStatus(updated).catch(() => 0);
+
     getUserEmail(updated.user_id)
       .then((email) => sendOrderStatus({ to: email, order: updated }))
       .catch(() => false);

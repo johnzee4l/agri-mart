@@ -44,7 +44,8 @@ usersRouter.get("/", async (req, res) => {
 
   let query = supabase().from("profiles").select(PROFILE_FIELDS, { count: "exact" });
 
-  const search = req.query.q ? String(req.query.q).trim() : "";
+  // Capped like the catalog search, so no query string can grow the filter without bound.
+  const search = req.query.q ? String(req.query.q).trim().slice(0, 120) : "";
   if (search) {
     const pattern = safePattern(search);
     query = query.or(`full_name.ilike.%${pattern}%,phone.ilike.%${pattern}%`);

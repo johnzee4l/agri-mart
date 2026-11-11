@@ -7,6 +7,7 @@ import { emitStock } from "../lib/realtime.js";
 import { sendOrderStatus } from "../lib/mailer.js";
 import { notifyLowStock } from "../lib/lowStock.js";
 import { getUserEmail } from "../lib/profile.js";
+import { notifyOrderPaid } from "../lib/pushEvents.js";
 
 /* FR-9. PayMongo webhook. The signature is an HMAC-SHA256 of "timestamp.rawBody"
    with the endpoint secret, sent in the Paymongo-Signature header as t, te (test)
@@ -68,7 +69,7 @@ paymentsRouter.post("/webhook", async (req, res) => {
 
   const { data: payment, error } = await supabase()
     .from("payments")
-    .select("id, order_id, status")
+    .select("id, order_id, method, status")
     .eq("paymongo_ref", intentId)
     .maybeSingle();
 
@@ -132,6 +133,9 @@ paymentsRouter.post("/webhook", async (req, res) => {
     .maybeSingle();
 
   if (order) {
+    // Staff and admins learn that packing can start (blueprint 6.2).
+    notifyOrderPaid({ order, method: payment.method }).catch(() => 0);
+
     getUserEmail(order.user_id)
       .then((email) => sendOrderStatus({ to: email, order }))
       .catch(() => false);

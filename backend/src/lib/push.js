@@ -8,6 +8,14 @@ import { supabase } from "./supabase.js";
 
 let ready = false;
 
+/* One indirection so the local suite can record sends instead of reaching a real push
+   service (FR-21). Nothing in production code calls the setter. */
+let transport = sendNotification;
+
+export function setPushTransport(next) {
+  transport = next ?? sendNotification;
+}
+
 export function pushConfigured() {
   return Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
 }
@@ -36,7 +44,7 @@ async function deliver(subscriptions, payload) {
   await Promise.all(
     subscriptions.map(async (subscription) => {
       try {
-        await sendNotification(
+        await transport(
           {
             endpoint: subscription.endpoint,
             keys: { p256dh: subscription.p256dh, auth: subscription.auth },
