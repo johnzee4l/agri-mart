@@ -1,0 +1,19 @@
+{
+  "name": "agrimart",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AgriMart: React storefront, Node API, Supabase database (monorepo)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web -c green,cyan \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "build": "npm --prefix frontend run build",
+    "install:all": "npm install && npm --prefix frontend install && npm --prefix backend install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

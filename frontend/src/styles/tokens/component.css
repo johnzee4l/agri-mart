@@ -1,0 +1,30 @@
+/* Component tier (kept deliberately small; designtokens.md 4.1, 7.2, 7.4, 7.5). */
+:root {
+  --control-sm: 36px;
+  --control-md: 44px;
+  --control-lg: 52px;
+
+  --row-comfortable: 56px;
+  --row-compact: 40px;
+
+  --container-content: 1200px;
+  --container-wide: 1440px;
+
+  --z-sticky: 20;
+  --z-header: 30;
+  --z-overlay: 40;
+  --z-sheet: 50;
+  --z-toast: 60;
+  --z-chat: 70;
+  --z-banner: 80;
+}
+
+[data-density="compact"] {
+  --row-h: var(--row-compact);
+  --control-h: var(--control-sm);
+}
+
+[data-density="comfortable"] {
+  --row-h: var(--row-comfortable);
+  --control-h: var(--control-md);
+}

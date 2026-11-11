@@ -1,0 +1,68 @@
+/* Fetch wrapper for the Node API (blueprint 6.5).
+   Base URL + Bearer token, one refresh on 401, standard { error, details } errors. */
+
+export const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
+
+const TOKEN_KEY = "agrimart.access_token";
+
+let onUnauthorized = null;
+
+/** Registered by AuthProvider so a failed refresh can log the user out. */
+export function setUnauthorizedHandler(handler) {
+  onUnauthorized = handler;
+}
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token) {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+export class ApiError extends Error {
+  constructor(message, status, details) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.details = details;
+  }
+}
+
+async function request(path, { method = "GET", body, retry = true } = {}) {
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: {
+      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (response.status === 401 && retry && onUnauthorized) {
+    const refreshed = await onUnauthorized();
+    if (refreshed) return request(path, { method, body, retry: false });
+  }
+
+  const payload = response.status === 204 ? null : await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new ApiError(
+      payload?.error ?? `Request failed with status ${response.status}`,
+      response.status,
+      payload?.details,
+    );
+  }
+
+  return payload;
+}
+
+export const api = {
+  get: (path) => request(path),
+  post: (path, body) => request(path, { method: "POST", body }),
+  patch: (path, body) => request(path, { method: "PATCH", body }),
+  put: (path, body) => request(path, { method: "PUT", body }),
+  del: (path) => request(path, { method: "DELETE" }),
+};

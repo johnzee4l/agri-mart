@@ -1,0 +1,95 @@
+/* Semantic role tokens (designtokens.md 17.3). Components reference this tier only. */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-canvas: var(--ink-50);
+  --bg-surface: #ffffff;
+  --bg-muted: var(--ink-100);
+  --bg-tint: var(--green-50);
+  --bg-warm: var(--harvest-50);
+  --bg-inverse: var(--ink-900);
+
+  --fg-default: var(--ink-900);
+  --fg-muted: var(--ink-600);
+  --fg-subtle: var(--ink-500);
+  --on-primary: #ffffff;
+  --on-accent: var(--ink-950);
+  --on-danger: #ffffff;
+  --on-inverse: var(--ink-50);
+
+  --primary: var(--green-600);
+  --primary-hover: var(--green-700);
+  --primary-pressed: var(--green-800);
+  --primary-subtle: var(--green-100);
+  --primary-text: var(--green-700);
+
+  --accent: var(--harvest-500);
+  --accent-hover: var(--harvest-600);
+  --accent-subtle: var(--harvest-100);
+  --accent-text: var(--harvest-700);
+
+  --success-text: var(--green-700);
+  --warning-text: var(--harvest-700);
+  --warning-subtle: var(--harvest-100);
+  --danger-fill: var(--rust-600);
+  --danger-hover: var(--rust-700);
+  --danger-subtle: var(--rust-50);
+  --danger-text: var(--rust-600);
+
+  --focus-ring: var(--green-600);
+  --field-edge: var(--ink-500);
+  --overlay: rgb(12 18 20 / 0.45);
+  --elevation-float: 0 16px 40px -16px rgb(12 18 20 / 0.28);
+
+  --duration-instant: 90ms;
+  --duration-fast: 160ms;
+  --duration-base: 240ms;
+  --duration-moderate: 360ms;
+  --duration-slow: 520ms;
+  --duration-morph: 640ms;
+  --duration-stock-flash: 900ms;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-canvas: var(--ink-950);
+  --bg-surface: var(--ink-900);
+  --bg-muted: var(--ink-800);
+  --bg-tint: var(--green-950);
+  --bg-warm: var(--harvest-950);
+  --bg-inverse: var(--ink-50);
+
+  --fg-default: var(--ink-50);
+  --fg-muted: var(--ink-300);
+  --fg-subtle: var(--ink-400);
+  --on-primary: var(--ink-950);
+  --on-accent: var(--ink-950);
+  --on-danger: var(--ink-50);
+  --on-inverse: var(--ink-900);
+
+  --primary: var(--green-400);
+  --primary-hover: var(--green-300);
+  --primary-pressed: var(--green-200);
+  --primary-subtle: var(--green-900);
+  --primary-text: var(--green-300);
+
+  --accent: var(--harvest-400);
+  --accent-hover: var(--harvest-300);
+  --accent-subtle: var(--harvest-900);
+  --accent-text: var(--harvest-300);
+
+  --success-text: var(--green-300);
+  --warning-text: var(--harvest-300);
+  --warning-subtle: var(--harvest-900);
+  --danger-fill: var(--rust-500);
+  --danger-hover: var(--rust-400);
+  --danger-subtle: var(--rust-950);
+  --danger-text: var(--rust-300);
+
+  --focus-ring: var(--green-400);
+  --field-edge: var(--ink-500);
+  --overlay: rgb(12 18 20 / 0.7);
+  --elevation-float: 0 16px 40px -12px rgb(0 0 0 / 0.6);
+}

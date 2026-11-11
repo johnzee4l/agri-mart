@@ -1,0 +1,23 @@
+{
+  "name": "agrimart-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "AgriMart API: Express 5 + Socket.IO + Supabase",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch src/index.js",
+    "start": "node --env-file-if-exists=.env src/index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.4",
+    "helmet": "^8.3.0",
+    "socket.io": "^4.8.4",
+    "zod": "^4.6.7"
+  }
+}

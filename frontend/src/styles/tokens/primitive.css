@@ -1,0 +1,51 @@
+/* Primitive scales (designtokens.md 5.1).
+   Primitives never become Tailwind utilities: only semantic.css may reference them. */
+:root {
+  --ink-50: #f5f7f7;
+  --ink-100: #e9eeee;
+  --ink-200: #d3dbdc;
+  --ink-300: #aebbbd;
+  --ink-400: #8a9a9c;
+  --ink-500: #66777a;
+  --ink-600: #4d5d61;
+  --ink-700: #3a474a;
+  --ink-800: #263134;
+  --ink-900: #172023;
+  --ink-950: #0c1214;
+
+  --green-50: #f1f7f2;
+  --green-100: #ddeee1;
+  --green-200: #bcddc5;
+  --green-300: #8fc49b;
+  --green-400: #5fa675;
+  --green-500: #3d8a5a;
+  --green-600: #2d6f47;
+  --green-700: #235a39;
+  --green-800: #1b4630;
+  --green-900: #133222;
+  --green-950: #0b1f15;
+
+  --harvest-50: #fdf8ef;
+  --harvest-100: #fbefd6;
+  --harvest-200: #f6dda8;
+  --harvest-300: #efc670;
+  --harvest-400: #e6a93e;
+  --harvest-500: #d68a1e;
+  --harvest-600: #b06f14;
+  --harvest-700: #8c5510;
+  --harvest-800: #6b410f;
+  --harvest-900: #4a2d0b;
+  --harvest-950: #2c1a06;
+
+  --rust-50: #fbefeb;
+  --rust-100: #f6dcd3;
+  --rust-200: #edb8a8;
+  --rust-300: #e08d74;
+  --rust-400: #d9644b;
+  --rust-500: #c2472f;
+  --rust-600: #a63a24;
+  --rust-700: #8a2e1c;
+  --rust-800: #6e2416;
+  --rust-900: #4f190f;
+  --rust-950: #2e0e08;
+}
