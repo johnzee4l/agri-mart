@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Version | 0.3 (Phases 1–3 implemented) |
+| Version | 0.5 (Phase 4 complete) |
 | Owner | Member 2 (`backend/src`) |
 | Source | `blueprint.md` sections 6 and 7, plus `designtokens.md` for UI-facing shapes |
 | Status | Phases 1 and 2 (health, auth, me, catalog, announcements, content, uploads) are implemented. Later phases still answer `501 { "error": "Not implemented yet" }` and replace their stubs in turn. |
@@ -138,6 +138,36 @@ Local testing needs a public HTTPS URL. Run `ngrok http 4000` (any tunnel works)
 **Order statuses.** `pending → paid → preparing → out_for_delivery → completed`, plus `cancelled`; pickup skips `out_for_delivery`.
 
 **Email.** Order confirmation and every status change go to the account email over Gmail SMTP (`SMTP_USER`, `SMTP_PASS`). Mail is best effort: an unconfigured or failing mailbox never fails an order request.
+
+## Phase 4 request and response bodies
+
+**Inventory.** All three routes need a staff or admin token; a customer gets `403`. Every adjustment is logged against the caller, so the log answers "who moved this stock".
+
+`GET /inventory/logs` → `200 { data, page, total }`, newest first. Filters: `?product_id&reason&from&to&page&limit`, `reason` ∈ `stock-in`, `sale`, `adjustment`, `spoilage`, `limit` 20 by default and 60 at most. A bad reason or product id is `400` with `details[].path`; each row carries `products: { name, unit, image_url }`.
+
+`GET /inventory/low-stock` → `200 { data }`: active products where `stock_qty <= reorder_level`, lowest first. The comparison is done by the `low_stock_products()` SQL function, because a PostgREST filter only compares against a literal, so the list never drifts from the truth.
+
+`POST /inventory/adjust` body `{ product_id, change_qty, reason }`. `change_qty` is a non-zero integer; `stock-in` must be positive and `spoilage` negative. → `201 { data: product, low_stock }`. An unknown product is `404`, an archived one `409`, and a change that would go below zero `409` without touching the row. Each success writes the `inventory_logs` row, broadcasts `stock` with the new quantity, and emails the admins when the product is now at or below `reorder_level`.
+
+**Low-stock email (FR-10).** After any deduction (`deduct_stock` when an order is paid or a COD order is confirmed) or adjustment that leaves a product at or below its reorder level, every active admin receives one email listing the affected products with their remaining quantity. Mail is best effort: a missing mailbox or SMTP failure is logged and never fails the stock change. `SMTP_HOST` and `SMTP_PORT` point the mailer at any relay for local testing; auth there is opt-in with `SMTP_AUTH=true`.
+
+## Phase 4 administration bodies
+
+**Users.** Admin only; staff and customers get `403`.
+
+`GET /users` → `200 { data, page, total }`, newest first, with `?q&role&is_active&page&limit` (`limit` 20 by default, 60 at most). `q` matches the name or phone, and every row is the profile plus `email` from the auth record. An unknown `role` or a non-boolean `is_active` is `400`.
+
+`PATCH /users/:id` body `{ role?, is_active? }` → `200 { data }`. Deactivation takes effect on that account's next request, which answers `403`. Changing your own role or deactivating yourself is `409`, an unknown id `404`, a bad role `400`.
+
+**Reports.** `GET /reports/summary` is for staff and admin (a customer gets `403`) and returns `{ sales, low_stock, recent_orders, counts }`. `sales` is `null` for staff; for admin it is `{ revenue, orders, average, days }` over the last 30 days.
+
+`GET /reports/:type` is admin only. `type` ∈ `sales`, `inventory`, `low-stock`, `top-products`, anything else `404`. Query `?from&to&format=json|csv`: a bare date includes that whole day, the default range is the last 30 days, and `from` on or after `to` is `400`. `format=csv` returns `text/csv` as an attachment named after the report. Sales and top products aggregate in SQL (`report_sales`, `report_top_products`) over paid, preparing, out-for-delivery and completed orders; the inventory report values stock at the current price and flags low rows; the low-stock report adds each shortfall.
+
+**Push.** `GET /push/public-key` (any signed-in account) → `{ key }`, with `null` when VAPID is not configured.
+
+`POST /push/subscribe` body `{ endpoint, keys: { p256dh, auth } }` → `201 { data: { id } }`. The endpoint is unique, so re-subscribing the same browser updates that row and moves it to the current account. `503` when VAPID is unset, `400` for a malformed subscription.
+
+`POST /push/unsubscribe` body `{ endpoint }` → `204`, scoped to the caller. `lib/push.js` sends with VAPID and deletes any subscription that answers `404` or `410`; sending a push is always best effort and never fails the request that triggered it.
 
 ## Realtime (`backend/src/chat.js`)
 

@@ -28,6 +28,23 @@ What it does:
    order while a customer sees only their own. Another account's order is 404.
 7. Deletes everything it created, including the auth users.
 
+`inventory.test.mjs` covers Phase 4: staff-only access, the live low-stock list, stock-in
+and spoilage adjustments, the log filters, refused adjustments (zero, wrong sign, below
+zero, archived product), the `stock` broadcast, and the low-stock email after both an
+adjustment and a COD deduction. Mail is delivered to a tiny SMTP sink started by the
+test, so the send is exercised for real; no external mailbox or credentials are needed.
+
+`admin.test.mjs` covers the rest of Phase 4: admin-only user listing, role changes and
+deactivation (including the 403 that follows), self-lockout protection, the dashboard
+summary (no sales for staff, totals for admin), all four reports with their SQL
+totals, CSV download headers, bad input, and push subscription storage, re-subscribe
+and owner-scoped unsubscribe. Push sending needs a real push service, so it is not
+sent here.
+
+```bash
+npm test            # runs all three files in order
+```
+
 Prerequisites: Docker running and the Supabase CLI installed. The first run is slow;
 later runs reuse the running stack. To use a hosted project instead, export
 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_ANON_KEY`; the local stack is

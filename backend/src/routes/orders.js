@@ -8,6 +8,7 @@ import { computeDeliveryFee, roundMoney } from "../lib/fee.js";
 import { createPaymentIntent, paymongoConfigured } from "../lib/paymongo.js";
 import { emitStock } from "../lib/realtime.js";
 import { sendOrderConfirmation, sendOrderStatus } from "../lib/mailer.js";
+import { notifyLowStock } from "../lib/lowStock.js";
 import { getUserEmail } from "../lib/profile.js";
 
 /* FR-5, FR-8, FR-9. Orders. Prices, stock, the delivery fee and item availability
@@ -378,8 +379,9 @@ ordersRouter.patch(
 
     let deducted = false;
     if (next === "preparing" && payment?.method === "cod" && !order.stock_deducted) {
-      await deductStock(order.id);
+      const low = await deductStock(order.id);
       deducted = true;
+      notifyLowStock(low).catch(() => 0);
     }
 
     const { error: updateError } = await supabase()

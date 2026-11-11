@@ -5,6 +5,7 @@ import { ApiError } from "../lib/errors.js";
 import { supabase } from "../lib/supabase.js";
 import { emitStock } from "../lib/realtime.js";
 import { sendOrderStatus } from "../lib/mailer.js";
+import { notifyLowStock } from "../lib/lowStock.js";
 import { getUserEmail } from "../lib/profile.js";
 
 /* FR-9. PayMongo webhook. The signature is an HMAC-SHA256 of "timestamp.rawBody"
@@ -102,11 +103,13 @@ paymentsRouter.post("/webhook", async (req, res) => {
     .eq("id", payment.order_id)
     .eq("status", "pending");
 
-  const { error: stockError } = await supabase().rpc("deduct_stock", {
+  const { data: lowProducts, error: stockError } = await supabase().rpc("deduct_stock", {
     order_id: payment.order_id,
   });
 
   if (stockError) throw new ApiError(500, "Could not deduct stock");
+
+  notifyLowStock(lowProducts).catch(() => 0);
 
   const { data: items } = await supabase()
     .from("order_items")
