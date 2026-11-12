@@ -105,7 +105,16 @@ Rules: the first saved address becomes the default; setting `is_default: true` c
 
 **Announcements.** `GET /announcements` is public and returns published rows only (`published_at` in the past), pinned first then newest. An admin token also sees drafts. `POST` body `{ title, body, is_pinned?, published_at? }` creates a draft when `published_at` is null or omitted; setting it publishes. `PATCH` with `published_at: null` unpublishes. Archive, restore and purge as above.
 
-**Content.** `GET /content` → `200 { data: { home_hero, home_banners, about, contact, store_location, delivery_rates } }`, a map of key to jsonb value. `PUT /content/:key` (admin) body `{ value }` upserts one key; unknown keys answer `404`.
+**Content.** `GET /content` → `200 { data: { home_hero, home_banners, about, contact, store_location, delivery_rates } }`, a map of key to jsonb value. `PUT /content/:key` (admin) body `{ value }` upserts the whole value of one key; unknown keys answer `404`. These are the shapes the storefront reads (`frontend/src/lib/content.js`, `pages/Home.jsx`, `pages/Contact.jsx`, `pages/Checkout.jsx`) and what `admin/Content.jsx` edits:
+
+| Key | Value |
+| --- | --- |
+| `home_hero` | `{ eyebrow, headline, subheadline, cta_label, cta_href }` |
+| `home_banners` | `[{ title, body, image_url, href }]`, in display order |
+| `about` | `{ body }` |
+| `contact` | `{ phone, email }` |
+| `store_location` | `{ address, hours, latitude, longitude }` — the pin checkout measures delivery distance from |
+| `delivery_rates` | `{ base_fee, per_km }` |
 
 **Uploads.** `POST /uploads` (admin) is `multipart/form-data` with one `file` field. JPEG, PNG, WebP, GIF or AVIF, 5 MB maximum. → `201 { data: { url, path } }` with the public URL of the object in `public-images`.
 
