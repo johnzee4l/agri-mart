@@ -1,0 +1,54 @@
+# Render Blueprint for the AgriMart API (blueprint section 10).
+#
+# Deploy: Render Dashboard -> New -> Blueprint -> pick this repository. Render reads this
+# file, builds the service from backend/, and asks for every variable marked sync: false.
+# docs/deploy.md walks through the rest: the webhook, the frontend origin, the uptime
+# pinger and the backups.
+
+services:
+  - type: web
+    name: agrimart-api
+    runtime: node
+    # Closest region to the Philippines; change it if the plan does not offer Singapore.
+    region: singapore
+    # free spins down after 15 idle minutes, which the uptime pinger covers for the demo.
+    # Switch to starter for the 99% target (blueprint section 10).
+    plan: free
+    branch: master
+    rootDir: backend
+    buildCommand: npm ci
+    # "start" already uses --env-file-if-exists, so Render's own environment wins.
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # The API answers through Render's proxy, so its hops are trusted and the rate
+      # limiters key on the real client IP instead of the proxy.
+      - key: TRUST_PROXY
+        value: 1
+      # Render's default Node is fine. Pin the local version with NODE_VERSION (26.13.0
+      # at the time of writing) if the deploy needs it to match exactly.
+      # Every value below is a secret or an origin: set it in the dashboard, or from
+      # docs/deploy.md, and never commit it here.
+      - key: FRONTEND_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: PAYMONGO_SECRET_KEY
+        sync: false
+      - key: PAYMONGO_WEBHOOK_SECRET
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
