@@ -125,13 +125,48 @@ export default function App() {
               }
             >
               <Route index element={<Dashboard />} />
-              <Route path="products" element={<AdminProducts />} />
+              <Route
+                path="products"
+                element={
+                  <RequireRole roles={["admin"]}>
+                    <AdminProducts />
+                  </RequireRole>
+                }
+              />
               <Route path="orders" element={<Orders />} />
               <Route path="inventory" element={<Inventory />} />
-              <Route path="announcements" element={<AdminAnnouncements />} />
-              <Route path="content" element={<Content />} />
-              <Route path="users" element={<Users />} />
-              <Route path="reports" element={<Reports />} />
+              <Route
+                path="announcements"
+                element={
+                  <RequireRole roles={["admin"]}>
+                    <AdminAnnouncements />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="content"
+                element={
+                  <RequireRole roles={["admin"]}>
+                    <Content />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="users"
+                element={
+                  <RequireRole roles={["admin"]}>
+                    <Users />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="reports"
+                element={
+                  <RequireRole roles={["admin"]}>
+                    <Reports />
+                  </RequireRole>
+                }
+              />
               <Route path="chat" element={<Chat />} />
             </Route>
           </Routes>

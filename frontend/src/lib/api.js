@@ -64,10 +64,44 @@ async function request(path, { method = "GET", body, retry = true, signal } = {}
   return payload;
 }
 
+/** multipart/form-data, used only by POST /uploads. Same token, refresh and error
+    handling as the JSON requests, and the browser sets the boundary itself. */
+async function upload(path, file, { field = "file", retry = true } = {}) {
+  const form = new FormData();
+  form.append(field, file);
+
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: form,
+  });
+
+  if (response.status === 401 && retry && onUnauthorized) {
+    const refreshed = await onUnauthorized();
+    if (refreshed) return upload(path, file, { field, retry: false });
+  }
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new ApiError(
+      payload?.error ?? `Upload failed with status ${response.status}`,
+      response.status,
+      payload?.details,
+    );
+  }
+
+  markSynced();
+
+  return payload;
+}
+
 export const api = {
   get: (path, { signal } = {}) => request(path, { signal }),
   post: (path, body) => request(path, { method: "POST", body }),
   patch: (path, body) => request(path, { method: "PATCH", body }),
   put: (path, body) => request(path, { method: "PUT", body }),
   del: (path) => request(path, { method: "DELETE" }),
+  upload,
 };

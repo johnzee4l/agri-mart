@@ -58,6 +58,14 @@ Source of truth for scope, requirements and design: [`docs/blueprint.md`](docs/b
    node database/tests/rls.test.mjs
    ```
 
+   For local uploads, keep the `storage` container running (`supabase start`; add
+   `-x studio -x mailpit` to leave the extras out) and create the bucket the upload
+   route expects from the declaration in `supabase/config.toml`:
+
+   ```bash
+   supabase seed buckets
+   ```
+
 4. **Run both apps**
 
    ```bash

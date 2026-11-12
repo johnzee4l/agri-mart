@@ -3,7 +3,7 @@ import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 
 import { ApiError } from "../lib/errors.js";
-import { supabase } from "../lib/supabase.js";
+import { authClient, supabase } from "../lib/supabase.js";
 import { getProfile } from "../lib/profile.js";
 import { auth, validate } from "../middleware.js";
 
@@ -115,7 +115,7 @@ authRouter.post(
   async (req, res) => {
     const { email, password } = req.validated.body;
 
-    const { data, error } = await supabase().auth.signInWithPassword({ email, password });
+    const { data, error } = await authClient().auth.signInWithPassword({ email, password });
     if (error || !data.session) throw new ApiError(401, "Email or password is incorrect.");
 
     const profile = await getProfile(data.user.id);
@@ -138,7 +138,7 @@ authRouter.post(
     body: z.object({ refresh_token: z.string().min(10, "Send the refresh token.") }),
   }),
   async (req, res) => {
-    const { data, error } = await supabase().auth.refreshSession({
+    const { data, error } = await authClient().auth.refreshSession({
       refresh_token: req.validated.body.refresh_token,
     });
 
