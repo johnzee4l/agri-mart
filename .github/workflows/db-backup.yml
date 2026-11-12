@@ -1,0 +1,56 @@
+# Nightly pg_dump (blueprint section 10: daily Supabase backups need the paid plan, so
+# the free plan gets a scheduled dump instead).
+#
+# Needs one repository secret, SUPABASE_DB_URL (Settings -> Secrets and variables ->
+# Actions -> New repository secret): the connection string from Supabase -> Project
+# Settings -> Database, with the password in it. Use the direct connection (port 5432) or
+# the session pooler, never the transaction pooler, which cannot hold one session.
+#
+# The image tag below should match the database major version (Supabase -> Settings ->
+# Infrastructure). A newer pg_dump can read an older server, so postgres:17 is safe for
+# anything up to 17. docs/deploy.md has the restore command.
+
+name: Database backup
+
+on:
+  schedule:
+    # 02:00 in the Philippines (UTC+8).
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the connection string is configured
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL is not set; add it under repository secrets."
+            exit 1
+          fi
+
+      - name: Dump the database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          stamp=$(date -u +%Y-%m-%d)
+          echo "STAMP=$stamp" >> "$GITHUB_ENV"
+
+          # pg_dump runs from the matching client image, so the runner's own client
+          # version can never mismatch the server.
+          docker run --rm \
+            -e PGURL="$SUPABASE_DB_URL" \
+            -v "$PWD:/dump" \
+            postgres:17-alpine \
+            sh -c 'pg_dump --no-owner --no-privileges --clean --if-exists "$PGURL" | gzip > "/dump/agrimart-$1.sql.gz"' sh "$stamp"
+
+          ls -lh "agrimart-$stamp.sql.gz"
+
+      - name: Keep it as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agrimart-dump-${{ github.run_id }}
+          path: agrimart-*.sql.gz
+          retention-days: 30
