@@ -35,6 +35,19 @@ export function disconnectSocket() {
   client?.disconnect();
 }
 
+/** The shared client with this tab's token applied and connected, for a caller that also
+    sends (chat) rather than only listening. Rejects when nobody is signed in. */
+export function connectSocket() {
+  const token = getToken();
+  if (!token) return Promise.reject(new Error("Not signed in"));
+
+  return getClient().then((socket) => {
+    socket.auth = { token };
+    if (!socket.connected) socket.connect();
+    return socket;
+  });
+}
+
 /** Subscribes to `stock { product_id, stock_qty }`. Returns an unsubscribe function. */
 export function onStock(handler) {
   const token = getToken();

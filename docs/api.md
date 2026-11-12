@@ -208,7 +208,7 @@ Reviewed against the blueprint checklist (validation, no raw SQL, no secrets in 
 
 **Origin.** CORS answers only the origins listed in `FRONTEND_URL` (comma-separated). Any other origin is `403 { error: "Origin not allowed" }` with no `Access-Control-Allow-Origin`, so a foreign page cannot read an API answer even with a stolen token. `helmet` sets the standard headers and `x-powered-by` is off.
 
-**Access.** Authentication is a Supabase access token in the `Authorization` header, verified per request and re-checked against `profiles.is_active`, so a deactivation applies to that account's next request. Every protected route answers `401` without a token and `403` for the wrong role: staff cannot reach users, reports, uploads, catalog writes or content writes. Reads and writes are scoped by `req.user.id`, never by an id taken from the body, so another customer's order, address or conversation is a `404`. The two `chat` stubs are the exception until Member 3 lands them: they hold no data and answer `501` to any caller.
+**Access.** Authentication is a Supabase access token in the `Authorization` header, verified per request and re-checked against `profiles.is_active`, so a deactivation applies to that account's next request. Every protected route answers `401` without a token and `403` for the wrong role: staff cannot reach users, reports, uploads, catalog writes or content writes. Reads and writes are scoped by `req.user.id`, never by an id taken from the body, so another customer's order, address or conversation is a `404`. The socket handshake applies the same two checks to `auth.token`, and a message is stored under the socket's own account, never one named in the payload.
 
 **Data and secrets.** Every database call goes through supabase-js builders or `rpc()` functions with named parameters; no SQL string is assembled in Node, and user input never reaches a filter expression unescaped (`q` is length-capped and stripped of PostgREST separators and LIKE wildcards). The only environment value a client ever sees is `VAPID_PUBLIC_KEY`; the service-role key, the PayMongo secret and webhook secret, the SMTP credentials and the VAPID private key stay in the server process. Only `.env.example` is tracked, with empty values, and `.gitignore` keeps real `.env` files out.
 
@@ -220,10 +220,16 @@ Socket.IO on the same port, same origin allowlist.
 
 | Event | Direction | Payload |
 | --- | --- | --- |
-| handshake | client → server | `auth: { token }` |
-| `message:send` | client → server | `{ body }` (customer) or `{ conversation_id, body }` (staff) |
+| handshake | client → server | `auth: { token }`; a missing, invalid or deactivated token fails with `connect_error` `unauthorized` |
+| `chat:ready` | server → client | `{ connected, role, rooms, conversation_id }` once the socket is authorised and in its rooms |
+| `message:send` | client → server | `{ body }` (customer) or `{ conversation_id, body }` (staff), with an optional ack callback |
+| ack | server → client | `{ ok: true, message }` or `{ ok: false, error }` for that send only |
 | `message:new` | server → client | `{ message }` to `conv:<customerId>` and the `staff` room |
 | `stock` | server → client | `{ product_id, stock_qty }` after any deduction or adjustment |
+
+The sender is the socket's own account and the body is trimmed and capped at 2000 characters. A message is written to `messages` before it is emitted, so anything received through `message:new` is already in `GET /chat/messages`; a client that both sent the message and listens to the room can therefore see it twice and must de-duplicate by `id`. Customers join `conv:<their own id>` only. Sockets are also how chat decides whether a push is worth sending: a customer message pushes to active staff and admins when no staff socket is connected, and a staff reply pushes to that customer when they have no socket. Push is best effort (see the push section) and skipped entirely when VAPID is unset.
+
+The two history routes answer `{ data, page, total }`. `GET /chat/messages` adds `conversation_id`, returns the newest page oldest-first (so a thread reads downward, `limit` defaults to 50 and caps at 100), creates the caller's own conversation on first use, answers `400` for a malformed `conversation_id` and `404` for one that does not exist or is not the caller's. `GET /chat/conversations` (staff and admin) lists every conversation newest activity first with `customer` (`id, full_name, role`) and `last_message` (`sender_id, body, created_at`) merged from the two tables, because `conversations.customer_id` points at `auth.users` and has nothing to embed.
 
 ## Frontend routes (blueprint 7.1)
 

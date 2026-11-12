@@ -1,0 +1,50 @@
+/* FR-18 (blueprint 6.6). PDF export is this page's print view: window.print() plus
+   these rules, so the project needs no PDF library.
+
+   Everything except the report itself is hidden rather than removed, because the
+   report has to escape the admin grid and its scroll containers without relying on
+   the layout's box model.
+
+   Two deliberate departures from the screen rules, both about paper:
+   - a hairline under each row, because a browser drops the zebra fill on paper
+     unless background printing is switched on;
+   - the table header repeats on every page and a row never splits across pages. */
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #report-print,
+  #report-print * {
+    visibility: visible;
+  }
+
+  #report-print {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    color: #000;
+  }
+
+  #report-print table {
+    font-size: 11pt;
+  }
+
+  #report-print thead {
+    display: table-header-group;
+  }
+
+  #report-print tr {
+    break-inside: avoid;
+  }
+
+  #report-print tbody td {
+    border-bottom: 1px solid #d5d9d9;
+  }
+}

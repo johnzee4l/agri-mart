@@ -5,9 +5,10 @@ import { formatDate, formatPHP } from "@/lib/format.js";
 import { EmptyState, ErrorNotice, LoadingLines } from "../components/AsyncState.jsx";
 import OrderStatusBadge from "../components/OrderStatusBadge.jsx";
 
-/* FR-10, FR-18 (blueprint 6.7). Dashboard: low stock and recent orders on the dense
-   canvas. KPIs are typographic, never cards (designtokens 8.5, 12), and the sales card
-   is Phase 4 (C3) — GET /reports/summary only fills `sales` for an admin.
+/* FR-10, FR-18 (blueprint 6.7). Dashboard: sales totals, low stock and recent orders
+   on the dense canvas. KPIs are typographic, never cards (designtokens 8.5, 12), and
+   GET /reports/summary only fills `sales` for an admin, so staff get the same page
+   without the money.
 
    One request: the summary already carries counts, the live low-stock list and the five
    newest orders, and staff are allowed to read it. */
@@ -44,6 +45,32 @@ export default function Dashboard() {
         <Kpi label="Orders" value={payload?.counts?.orders ?? 0} />
         <Kpi label="Low stock" value={payload?.counts?.low_stock ?? 0} />
       </div>
+
+      {payload?.sales ? (
+        <section className="flex flex-col gap-4" aria-labelledby="sales-heading">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 id="sales-heading" className="text-heading-sm text-fg">
+                Sales
+              </h3>
+              <p className="text-caption text-fg-muted">Last 30 days</p>
+            </div>
+            <Link to="/admin/reports" className="text-body-sm font-semibold text-primary-text">
+              Open reports
+            </Link>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-10">
+            <Kpi label="Revenue" value={formatPHP(payload.sales.revenue)} />
+            <Kpi label="Orders" value={payload.sales.orders} />
+            <Kpi label="Average order" value={formatPHP(payload.sales.average)} />
+          </div>
+        </section>
+      ) : (
+        <p className="text-body-sm text-fg-muted">
+          Sales totals are for admins. Orders and stock are yours to run from here.
+        </p>
+      )}
 
       <section className="flex flex-col gap-4" aria-labelledby="low-stock-heading">
         <div className="flex flex-wrap items-center justify-between gap-3">
