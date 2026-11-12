@@ -1,0 +1,44 @@
+# Uptime pinger (blueprint section 10: a paid instance or an uptime pinger for the demo
+# and the 99% target). Runs every 10 minutes, under Render's 15-minute idle spin-down.
+#
+# Set the repository variable API_BASE_URL (Settings -> Secrets and variables -> Actions
+# -> Variables) to the deployed origin, for example https://agrimart-api.onrender.com.
+# Without it the job logs and stops instead of failing.
+#
+# GitHub disables scheduled workflows after 60 days without repository activity; re-enable
+# it from the Actions tab if the project goes quiet for a while.
+
+name: Uptime
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the API is awake and serving data
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          if [ -z "$API_BASE_URL" ]; then
+            echo "API_BASE_URL is not set; nothing to ping."
+            exit 0
+          fi
+
+          # Wakes the instance and proves the process answers. A cold free instance can
+          # take most of a minute, so the timeout is generous.
+          health=$(curl -sS -o /tmp/health.json -w "%{http_code}" --max-time 90 "$API_BASE_URL/api/health")
+          echo "GET /api/health -> $health $(cat /tmp/health.json)"
+
+          # A public, database-backed route: proves PostgREST and the service key work,
+          # not just that the process is up.
+          catalog=$(curl -sS -o /tmp/catalog.json -w "%{http_code}" --max-time 90 "$API_BASE_URL/api/products?limit=1")
+          echo "GET /api/products?limit=1 -> $catalog"
+
+          if [ "$health" != "200" ] || [ "$catalog" != "200" ]; then
+            echo "::error::The API is not healthy (health $health, catalog $catalog)."
+            exit 1
+          fi
