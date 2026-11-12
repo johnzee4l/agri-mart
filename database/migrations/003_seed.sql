@@ -5,7 +5,7 @@
 insert into public.site_content (key, value) values
   ('store_location', '{"latitude": 14.5995, "longitude": 120.9842, "address": "AgriMart, Manila", "hours": "7:00-18:00"}'),
   ('delivery_rates', '{"base_fee": 50, "per_km": 10}'),
-  ('home_hero', '{"title": "Fresh from the farm", "subtitle": "Order today, harvest tomorrow"}'),
+  ('home_hero', '{"eyebrow": "Agricultural supply store", "headline": "Everything the farm needs, priced and in stock.", "subheadline": "Seeds, fertilizers, feeds, tools and irrigation supplies for farmers, backyard growers and livestock raisers. Order online for delivery or store pickup.", "cta_label": "Browse products", "cta_href": "/products"}'),
   ('home_banners', '[]'),
   ('about', '{"body": "AgriMart supplies farms and kitchens across the region."}'),
   ('contact', '{"phone": "+63 900 000 0000", "email": "hello@agrimart.test"}')

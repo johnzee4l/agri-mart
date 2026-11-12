@@ -9,6 +9,7 @@ import Button from "../components/ui/Button.jsx";
 import Dialog from "../components/ui/Dialog.jsx";
 import Input from "../components/ui/Input.jsx";
 import Segmented from "../components/ui/Segmented.jsx";
+import { AdminTable, Cell, Pagination, Row } from "./AdminTable.jsx";
 import CategoryDialog from "./CategoryDialog.jsx";
 import ProductFormDialog from "./ProductFormDialog.jsx";
 
@@ -62,7 +63,6 @@ export default function AdminProducts() {
 
   const rows = asList(products.data);
   const total = products.data?.total ?? rows.length;
-  const lastPage = Math.max(1, Math.ceil(total / PAGE_LIMIT));
 
   function switchTab(next) {
     setTab(next);
@@ -236,31 +236,18 @@ export default function AdminProducts() {
       ) : null}
 
       {rows.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full border-separate border-spacing-0 text-body-sm">
-            <thead>
-              <tr className="text-caption font-semibold text-fg-muted uppercase">
-                <th scope="col" className="pb-2 text-left">
-                  Product
-                </th>
-                <th scope="col" className="pb-2 text-left">
-                  Category
-                </th>
-                <th scope="col" className="pb-2 text-right">
-                  Price
-                </th>
-                <th scope="col" className="pb-2 text-right">
-                  Stock
-                </th>
-                <th scope="col" className="pb-2 text-right">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+        <AdminTable
+          columns={[
+            { label: "Product" },
+            { label: "Category" },
+            { label: "Price", align: "right" },
+            { label: "Stock", align: "right" },
+            { label: "Actions", align: "right" },
+          ]}
+        >
               {rows.map((product, index) => (
-                <tr key={product.id} className={index % 2 === 1 ? "bg-muted" : undefined}>
-                  <td className="h-[var(--row-h)] rounded-l-md px-3">
+                <Row key={product.id} index={index}>
+                  <Cell>
                     <span className="flex items-center gap-3">
                       {product.image_url ? (
                         <img src={product.image_url} alt="" className="size-8 rounded-md object-cover" />
@@ -281,17 +268,17 @@ export default function AdminProducts() {
                         ) : null}
                       </span>
                     </span>
-                  </td>
-                  <td className="h-[var(--row-h)] px-3 text-fg-muted">
+                  </Cell>
+                  <Cell className="text-fg-muted">
                     {categoryNames.get(product.category_id) ?? "—"}
-                  </td>
-                  <td className="h-[var(--row-h)] px-3 text-right tabular-nums text-fg">
+                  </Cell>
+                  <Cell align="right" className="tabular-nums text-fg">
                     {formatPHP(product.price)}
-                  </td>
-                  <td className="h-[var(--row-h)] px-3 text-right tabular-nums text-fg">
+                  </Cell>
+                  <Cell align="right" className="tabular-nums text-fg">
                     {product.stock_qty} {product.unit ?? ""}
-                  </td>
-                  <td className="h-[var(--row-h)] rounded-r-md px-3">
+                  </Cell>
+                  <Cell align="right">
                     <span className="flex flex-wrap items-center justify-end gap-1">
                       <Button size="sm" variant="ghost" onClick={() => setEditing(product)}>
                         <PencilSimple size={16} aria-hidden="true" />
@@ -330,32 +317,13 @@ export default function AdminProducts() {
                         </Button>
                       )}
                     </span>
-                  </td>
-                </tr>
+                  </Cell>
+                </Row>
               ))}
-            </tbody>
-          </table>
-        </div>
+        </AdminTable>
       ) : null}
 
-      {lastPage > 1 ? (
-        <div className="flex items-center justify-between gap-4">
-          <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
-            Previous
-          </Button>
-          <span className="text-caption text-fg-muted">
-            Page {page} of {lastPage}
-          </span>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={page >= lastPage}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      ) : null}
+      <Pagination page={page} total={total} limit={PAGE_LIMIT} onPage={setPage} />
 
       <ProductFormDialog
         open={creating || Boolean(editing)}
