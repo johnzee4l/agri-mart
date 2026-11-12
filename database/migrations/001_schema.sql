@@ -138,9 +138,14 @@ create table if not exists public.messages (
 create index if not exists products_category_idx on public.products (category_id);
 create index if not exists orders_user_status_idx on public.orders (user_id, status);
 create index if not exists inventory_logs_product_idx on public.inventory_logs (product_id);
+create index if not exists messages_conversation_idx on public.messages (conversation_id, created_at);
 
 -- RLS on, with the customer-facing rules. The API uses the service role, which
 -- bypasses these; they protect anything that talks to Supabase directly.
+--
+-- Every policy is scoped `to authenticated`, so the anonymous key reads nothing at all
+-- (Phase 1 verification, database/tests/rls.test.mjs). The storefront and the admin panel
+-- go through the Node API, which holds no anon key.
 alter table public.profiles enable row level security;
 alter table public.addresses enable row level security;
 alter table public.categories enable row level security;
@@ -167,13 +172,13 @@ create policy addresses_own on public.addresses for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 drop policy if exists products_read on public.products;
-create policy products_read on public.products for select using (true);
+create policy products_read on public.products for select to authenticated using (true);
 
 drop policy if exists categories_read on public.categories;
-create policy categories_read on public.categories for select using (true);
+create policy categories_read on public.categories for select to authenticated using (true);
 
 drop policy if exists site_content_read on public.site_content;
-create policy site_content_read on public.site_content for select using (true);
+create policy site_content_read on public.site_content for select to authenticated using (true);
 
 drop policy if exists orders_own_read on public.orders;
 create policy orders_own_read on public.orders for select using (auth.uid() = user_id);
@@ -192,7 +197,8 @@ create policy payments_own_read on public.payments for select using (
 );
 
 drop policy if exists announcements_read on public.announcements;
-create policy announcements_read on public.announcements for select using (published_at is not null);
+create policy announcements_read on public.announcements for select to authenticated
+  using (published_at is not null and deleted_at is null);
 
 drop policy if exists push_subscriptions_own on public.push_subscriptions;
 create policy push_subscriptions_own on public.push_subscriptions for all

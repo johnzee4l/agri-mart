@@ -33,7 +33,12 @@ and tick the Phase 5 boxes once the PR is merged.
 4. Authentication → URL Configuration: set the Site URL to the deployed frontend origin and
    add `<frontend>/reset` to the redirect allow list, or the password-reset link lands
    nowhere.
-5. Copy `Project URL` and the `service_role` key for Render. The service-role key is the
+5. Authentication → Emails → SMTP Settings: enable **custom SMTP** with the same Gmail
+   address and App Password the API uses (`SMTP_USER` / `SMTP_PASS`). Without it, reset and
+   confirmation mail goes out through Supabase's shared sender, which is rate limited to a
+   few messages an hour and more likely to land in spam. If the demo signs up several
+   accounts at once, also raise the limits under Authentication → Rate Limits.
+6. Copy `Project URL` and the `service_role` key for Render. The service-role key is the
    only Supabase credential the server needs; it must never reach the browser.
 
 ## 2. Render API service
