@@ -25,7 +25,38 @@ Source of truth for scope, requirements and design: [`docs/blueprint.md`](docs/b
 
    Fill in `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `backend/.env`. The app runs without them; only endpoints that touch the database need them.
 
-3. **Create the database** (Member 3, Phase 1): Supabase project + storage bucket `public-images`, then the migrations in `database/migrations/` (`001_schema.sql`, `002_functions.sql`, `003_seed.sql`). The folder is reserved but empty in the scaffold.
+3. **Create the database** (Member 3, Phase 1)
+
+   1. Create a Supabase project and a **public** storage bucket named `public-images`.
+      Admin uploads write there and the storefront reads the public URL.
+   2. Apply the migrations in `database/migrations/` **in order**: `001_schema.sql`
+      (tables, indexes, RLS), `002_functions.sql` (trigger and stock functions),
+      `003_seed.sql` (categories, ten sample products, site content). Either paste each
+      file into the project's SQL editor, or use `psql` with the direct connection string:
+
+      ```bash
+      psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/001_schema.sql
+      psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/002_functions.sql
+      psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/003_seed.sql
+      ```
+
+      All three are safe to re-run. `docs/diagrams/er-diagram.md` shows what they create.
+   3. Promote the first admin: signup only ever creates a customer, so the first one is
+      promoted in the database, with the statement at the bottom of `003_seed.sql`:
+
+      ```sql
+      update public.profiles set role = 'admin'
+       where id = (select id from auth.users where email = 'owner@example.com');
+      ```
+   4. Point Supabase Auth at the app (URL configuration and custom SMTP for password
+      reset) and set `FRONTEND_URL` on the API. `docs/deploy.md` has the full checklist.
+
+   Prefer to work locally? `npm test --prefix backend` starts the same migrations in
+   Docker. To check Row Level Security either way:
+
+   ```bash
+   node database/tests/rls.test.mjs
+   ```
 
 4. **Run both apps**
 
@@ -45,7 +76,7 @@ frontend/     Vite + React. src/pages (storefront), src/admin (admin panel),
               src/styles (token layer), src/lib (api, auth, cn)
 backend/      Express 5 + Socket.IO. src/routes is one file per resource,
               src/lib holds supabase.js, src/chat.js is the socket attach point
-database/     migrations/ (ARC: Member 3 Phase 1)
+database/     migrations/ (schema, functions, seed) and tests/ (RLS verification)
 docs/         blueprint, design tokens, member plans, api.md, diagrams/
 ```
 
