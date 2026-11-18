@@ -16,6 +16,8 @@ import { asList, formatPHP } from "@/lib/format.js";
 import { cn } from "@/lib/cn.js";
 import { duration, ease } from "@/styles/tokens/motion.js";
 
+/* Storefront menu. Staff see only the console link, since these pages are the
+   customers' side. */
 const links = [
   { to: "/", label: "Home", end: true },
   { to: "/products", label: "Products" },
@@ -95,7 +97,10 @@ export default function Navbar() {
   };
 
   const canUseAdmin = role === "admin" || role === "staff";
-  const firstName = profile?.full_name?.split(" ")[0] ?? "Account";
+  /* Staff accounts can be created without a full name, and an empty string still passes
+     the null check: trim first so the account chip never renders blank. */
+  const fullName = profile?.full_name?.trim();
+  const firstName = fullName ? fullName.split(/\s+/)[0] : "Account";
 
   return (
     <MotionConfig reducedMotion="user">
@@ -136,7 +141,7 @@ export default function Navbar() {
             >
               <div className="flex items-center justify-between gap-3">
                 <Link
-                  to="/"
+                  to={canUseAdmin ? "/admin" : "/"}
                   onClick={() => setOpen(false)}
                   className="flex items-center gap-2"
                 >
@@ -155,6 +160,9 @@ export default function Navbar() {
                 </button>
               </div>
 
+              {/* Catalog search is a customer tool; its results open a product page that
+                  staff cannot reach, so it stays off for them. */}
+              {canUseAdmin ? null : (
               <div>
                 <label htmlFor="nav-search" className="sr-only">
                   Search products
@@ -231,10 +239,13 @@ export default function Navbar() {
                   </div>
                 ) : null}
               </div>
+              )}
 
               <nav aria-label="Main">
                 <ul className="flex flex-col gap-0.5">
-                  {links.map((link) => (
+                  {/* Announcements and Contact are storefront pages, so staff see only
+                      the console link. */}
+                  {canUseAdmin ? null : links.map((link) => (
                     <li key={link.to}>
                       <NavLink
                         to={link.to}
@@ -257,7 +268,9 @@ export default function Navbar() {
               </nav>
 
               <div className="flex flex-col gap-2">
-                {isAuthenticated ? (
+                {/* The cart belongs to the customer storefront; staff and admins work in
+                    the console, so it is not shown on their account. */}
+                {isAuthenticated && !canUseAdmin ? (
                   <Link
                     to="/cart"
                     onClick={() => setOpen(false)}
@@ -276,7 +289,7 @@ export default function Navbar() {
                 {profile ? (
                   <>
                     <Link
-                      to="/account"
+                      to={canUseAdmin ? "/admin" : "/account"}
                       onClick={() => setOpen(false)}
                       className="flex min-h-11 items-center justify-between gap-2 rounded-lg bg-muted px-4 text-label font-semibold text-fg"
                     >

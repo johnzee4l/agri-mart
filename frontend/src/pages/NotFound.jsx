@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { EmptyState } from "../components/AsyncState.jsx";
 
 /* Unknown URLs used to leave <main> empty, which looks like a broken page. This
-   keeps the storefront frame and offers the two useful ways back. */
+   keeps the frame and offers the two destinations that still exist. */
 export default function NotFound() {
   return (
     <section className="mx-auto w-full max-w-[var(--container-content)] px-4 py-10 lg:px-10 lg:py-16">
@@ -13,21 +13,21 @@ export default function NotFound() {
 
       <EmptyState
         title="The link may be old or mistyped"
-        body="Everything else is still here: browse the catalog or head back to the home page."
+        body="Everything else is still here: read the announcements or open your account."
       />
 
       <div className="flex flex-wrap justify-center gap-2">
         <Link
-          to="/products"
+          to="/announcements"
           className="inline-flex h-[var(--control-md)] items-center rounded-full bg-primary px-5 text-label font-semibold text-on-primary hover:bg-primary-hover"
         >
-          Browse products
+          Read announcements
         </Link>
         <Link
-          to="/"
+          to="/account"
           className="inline-flex h-[var(--control-md)] items-center rounded-full bg-muted px-5 text-label font-semibold text-fg hover:bg-muted/80"
         >
-          Go home
+          Open your account
         </Link>
       </div>
     </section>

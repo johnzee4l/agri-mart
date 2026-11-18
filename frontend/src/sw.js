@@ -8,7 +8,7 @@
    - Orders and /me: network first with the last response as fallback.
    - Auth, payments, chat, push and health: never cached, always network only. */
 
-const VERSION = "v6";
+const VERSION = "v7";
 const SHELL_CACHE = `agrimart-shell-${VERSION}`;
 const DATA_CACHE = `agrimart-data-${VERSION}`;
 const TILE_CACHE = "agrimart-tiles-v1";

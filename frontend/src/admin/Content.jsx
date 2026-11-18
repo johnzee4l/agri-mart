@@ -9,8 +9,7 @@ import Input from "../components/ui/Input.jsx";
 /* FR-17 (blueprint 6.7). One editor per site_content key, written with PUT
    /content/:key. The shapes are the ones the storefront reads (lib/content.js and
    pages/Home.jsx, Contact.jsx, Checkout.jsx), so what is saved here is what shows on
-   the site: hero copy, the banner strip, About, Contact, the store pin and the
-   delivery rates the checkout charges from. */
+   the site: hero copy, the banner strip, About, Contact and the store pin. */
 
 const HERO_FIELDS = [
   { name: "eyebrow", label: "Eyebrow", type: "text" },

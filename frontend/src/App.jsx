@@ -86,14 +86,37 @@ export default function App() {
       >
         <Suspense fallback={<RouteFallback />}>
           <Routes>
+            {/* The storefront is the customers' side. Staff keep working in the
+                console, so these open for guests and customers only. */}
             <Route element={<MorphLayout />}>
-              <Route path="/" element={<Home />} />
-              <Route path="/products" element={<Products />} />
-              <Route path="/products/:id" element={<ProductDetail />} />
+              <Route
+                path="/"
+                element={
+                  <RequireRole denyRoles={["admin", "staff"]}>
+                    <Home />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="/products"
+                element={
+                  <RequireRole denyRoles={["admin", "staff"]}>
+                    <Products />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="/products/:id"
+                element={
+                  <RequireRole denyRoles={["admin", "staff"]}>
+                    <ProductDetail />
+                  </RequireRole>
+                }
+              />
               <Route
                 path="/cart"
                 element={
-                  <RequireRole>
+                  <RequireRole roles={["customer"]}>
                     <Cart />
                   </RequireRole>
                 }
@@ -101,7 +124,7 @@ export default function App() {
               <Route
                 path="/checkout"
                 element={
-                  <RequireRole>
+                  <RequireRole roles={["customer"]}>
                     <Checkout />
                   </RequireRole>
                 }
@@ -109,7 +132,7 @@ export default function App() {
               <Route
                 path="/orders/:id"
                 element={
-                  <RequireRole>
+                  <RequireRole roles={["customer"]}>
                     <OrderResult />
                   </RequireRole>
                 }
@@ -118,12 +141,26 @@ export default function App() {
               <Route path="/signup" element={<Auth mode="signup" />} />
               <Route path="/forgot" element={<Auth mode="forgot" />} />
               <Route path="/reset" element={<Auth mode="reset" />} />
-              <Route path="/announcements" element={<Announcements />} />
-              <Route path="/contact" element={<Contact />} />
+              <Route
+                path="/announcements"
+                element={
+                  <RequireRole denyRoles={["admin", "staff"]}>
+                    <Announcements />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="/contact"
+                element={
+                  <RequireRole denyRoles={["admin", "staff"]}>
+                    <Contact />
+                  </RequireRole>
+                }
+              />
               <Route
                 path="/account"
                 element={
-                  <RequireRole>
+                  <RequireRole roles={["customer"]}>
                     <Account />
                   </RequireRole>
                 }

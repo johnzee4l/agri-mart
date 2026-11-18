@@ -23,10 +23,12 @@ function itemClass({ isActive }) {
 
 export default function MobileNav() {
   const { pathname } = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, role } = useAuth();
   const { count } = useCart();
 
-  if (pathname.startsWith("/admin")) return null;
+  /* Staff and admins work in the console, which carries its own navigation, so the
+     customer bar stays off for them. */
+  if (pathname.startsWith("/admin") || role === "admin" || role === "staff") return null;
 
   const account = isAuthenticated
     ? { to: "/account", label: "Account" }

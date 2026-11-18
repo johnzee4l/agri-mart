@@ -508,9 +508,9 @@ export default function Account() {
               {orderList.map((order) => (
                 <li
                   key={order.id}
-                  className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg bg-muted/60 px-4 py-3"
+                  className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg bg-muted/60 px-4 py-3"
                 >
-                  <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="flex w-full min-w-0 flex-col sm:w-auto sm:flex-1">
                     <span className="truncate text-label font-semibold text-fg">
                       {orderSummary(order).label}
                     </span>
@@ -524,20 +524,22 @@ export default function Account() {
                     </span>
                   </span>
                   <OrderStatusBadge status={order.status} />
-                  <span className="text-label font-semibold text-fg tabular-nums">
+                  <span className="ml-auto text-label font-semibold text-fg tabular-nums sm:ml-0">
                     {order.total_amount != null ? formatPHP(order.total_amount) : "—"}
                   </span>
-                  <Link
-                    to={`/orders/${order.id}`}
-                    className="text-caption font-semibold text-primary-text hover:underline"
-                  >
-                    View order
-                  </Link>
-                  {order.status === "pending" ? (
-                    <Button size="sm" variant="ghost" onClick={() => setCancelTarget(order)}>
-                      Cancel
-                    </Button>
-                  ) : null}
+                  <span className="flex items-center gap-2">
+                    <Link
+                      to={`/orders/${order.id}`}
+                      className="inline-flex min-h-9 items-center text-caption font-semibold text-primary-text hover:underline"
+                    >
+                      View order
+                    </Link>
+                    {order.status === "pending" ? (
+                      <Button size="sm" variant="ghost" onClick={() => setCancelTarget(order)}>
+                        Cancel
+                      </Button>
+                    ) : null}
+                  </span>
                 </li>
               ))}
             </ul>
