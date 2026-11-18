@@ -24,7 +24,7 @@ function announcementState(row) {
   }
 
   if (Date.parse(row.published_at) > Date.now()) {
-    return { key: "scheduled", label: "Scheduled", tone: "bg-accent-subtle text-accent-text" };
+    return { key: "scheduled", label: "Scheduled", tone: "bg-highlight-subtle text-highlight-text" };
   }
 
   return { key: "published", label: "Published", tone: "bg-primary-subtle text-primary-text" };
@@ -489,7 +489,7 @@ function AnnouncementForm({ open, announcement, onClose, onSaved }) {
             rows={6}
             maxLength={5000}
             onChange={(event) => setBody(event.target.value)}
-            className="rounded-md bg-surface p-3.5 text-base text-fg ring-1 ring-inset ring-field-edge"
+            className="rounded-md bg-muted p-3.5 text-base text-fg"
           />
         </label>
 

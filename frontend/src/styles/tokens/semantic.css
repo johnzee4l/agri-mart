@@ -3,20 +3,25 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --bg-canvas: var(--ink-50);
+  --bg-canvas: var(--soil-50);
   --bg-surface: #ffffff;
-  --bg-muted: var(--ink-100);
+  --bg-muted: var(--soil-100);
   --bg-tint: var(--green-50);
   --bg-warm: var(--harvest-50);
-  --bg-inverse: var(--ink-900);
 
-  --fg-default: var(--ink-900);
-  --fg-muted: var(--ink-600);
-  --fg-subtle: var(--ink-500);
+  --tile-surface: #ffffff;
+  --tile-mint: var(--sprout-200);
+  --tile-sun: var(--harvest-200);
+  --tile-bloom: var(--bloom-200);
+  --tile-inverse: var(--soil-900);
+
+  --fg-default: var(--soil-900);
+  --fg-muted: var(--soil-600);
+  --fg-subtle: var(--soil-500);
   --on-primary: #ffffff;
-  --on-accent: var(--ink-950);
+  --on-highlight: var(--soil-950);
   --on-danger: #ffffff;
-  --on-inverse: var(--ink-50);
+  --on-inverse: var(--soil-50);
 
   --primary: var(--green-600);
   --primary-hover: var(--green-700);
@@ -24,10 +29,10 @@
   --primary-subtle: var(--green-100);
   --primary-text: var(--green-700);
 
-  --accent: var(--harvest-500);
-  --accent-hover: var(--harvest-600);
-  --accent-subtle: var(--harvest-100);
-  --accent-text: var(--harvest-700);
+  --highlight: var(--harvest-500);
+  --highlight-hover: var(--harvest-600);
+  --highlight-subtle: var(--harvest-100);
+  --highlight-text: var(--harvest-700);
 
   --success-text: var(--green-700);
   --warning-text: var(--harvest-700);
@@ -38,9 +43,15 @@
   --danger-text: var(--rust-600);
 
   --focus-ring: var(--green-600);
-  --field-edge: var(--ink-500);
-  --overlay: rgb(12 18 20 / 0.45);
-  --elevation-float: 0 16px 40px -16px rgb(12 18 20 / 0.28);
+  --field-edge: var(--soil-500);
+  --overlay: rgb(18 16 13 / 0.45);
+  --elevation-float: 0 16px 40px -16px rgb(18 16 13 / 0.28);
+
+  --viz-1: var(--green-600);
+  --viz-2: var(--bloom-500);
+  --viz-3: var(--harvest-600);
+  --viz-4: var(--soil-500);
+  --viz-ghost: var(--soil-300);
 
   --duration-instant: 90ms;
   --duration-fast: 160ms;
@@ -49,25 +60,42 @@
   --duration-slow: 520ms;
   --duration-morph: 640ms;
   --duration-stock-flash: 900ms;
+
+  --tile-gap: 12px;
+  --tile-pad-sm: 12px;
+  --tile-pad-md: 20px;
+  --tile-pad-lg: 28px;
+  --bento-row: 160px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --tile-gap: 16px;
+  }
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg-canvas: var(--ink-950);
-  --bg-surface: var(--ink-900);
-  --bg-muted: var(--ink-800);
+  --bg-canvas: var(--soil-950);
+  --bg-surface: var(--soil-900);
+  --bg-muted: var(--soil-800);
   --bg-tint: var(--green-950);
   --bg-warm: var(--harvest-950);
-  --bg-inverse: var(--ink-50);
 
-  --fg-default: var(--ink-50);
-  --fg-muted: var(--ink-300);
-  --fg-subtle: var(--ink-400);
-  --on-primary: var(--ink-950);
-  --on-accent: var(--ink-950);
-  --on-danger: var(--ink-50);
-  --on-inverse: var(--ink-900);
+  --tile-surface: var(--soil-900);
+  --tile-mint: var(--green-900);
+  --tile-sun: var(--harvest-900);
+  --tile-bloom: var(--bloom-900);
+  --tile-inverse: var(--soil-100);
+
+  --fg-default: var(--soil-50);
+  --fg-muted: var(--soil-300);
+  --fg-subtle: var(--soil-400);
+  --on-primary: var(--soil-950);
+  --on-highlight: var(--soil-950);
+  --on-danger: var(--soil-50);
+  --on-inverse: var(--soil-900);
 
   --primary: var(--green-400);
   --primary-hover: var(--green-300);
@@ -75,10 +103,10 @@
   --primary-subtle: var(--green-900);
   --primary-text: var(--green-300);
 
-  --accent: var(--harvest-400);
-  --accent-hover: var(--harvest-300);
-  --accent-subtle: var(--harvest-900);
-  --accent-text: var(--harvest-300);
+  --highlight: var(--harvest-400);
+  --highlight-hover: var(--harvest-300);
+  --highlight-subtle: var(--harvest-900);
+  --highlight-text: var(--harvest-300);
 
   --success-text: var(--green-300);
   --warning-text: var(--harvest-300);
@@ -89,7 +117,13 @@
   --danger-text: var(--rust-300);
 
   --focus-ring: var(--green-400);
-  --field-edge: var(--ink-500);
-  --overlay: rgb(12 18 20 / 0.7);
+  --field-edge: var(--soil-500);
+  --overlay: rgb(18 16 13 / 0.7);
   --elevation-float: 0 16px 40px -12px rgb(0 0 0 / 0.6);
+
+  --viz-1: var(--green-400);
+  --viz-2: var(--bloom-400);
+  --viz-3: var(--harvest-400);
+  --viz-4: var(--soil-300);
+  --viz-ghost: var(--soil-700);
 }

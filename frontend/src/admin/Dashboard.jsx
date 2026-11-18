@@ -5,9 +5,9 @@ import { formatDate, formatPHP } from "@/lib/format.js";
 import { EmptyState, ErrorNotice, LoadingLines } from "../components/AsyncState.jsx";
 import OrderStatusBadge from "../components/OrderStatusBadge.jsx";
 
-/* FR-10, FR-18 (blueprint 6.7). Dashboard: low stock and recent orders on the dense
-   canvas. KPIs are typographic, never cards (designtokens 8.5, 12), and the sales card
-   is Phase 4 (C3) — GET /reports/summary only fills `sales` for an admin.
+/* FR-10, FR-18 (blueprint 6.7). Dashboard: sales for the last 30 days (admin only),
+   low stock and recent orders on the dense canvas. KPIs are typographic, never cards
+   (designtokens 8.5, 12); GET /reports/summary only fills `sales` for an admin.
 
    One request: the summary already carries counts, the live low-stock list and the five
    newest orders, and staff are allowed to read it. */
@@ -44,6 +44,24 @@ export default function Dashboard() {
         <Kpi label="Orders" value={payload?.counts?.orders ?? 0} />
         <Kpi label="Low stock" value={payload?.counts?.low_stock ?? 0} />
       </div>
+
+      {payload?.sales ? (
+        <section className="flex flex-col gap-4" aria-labelledby="sales-heading">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 id="sales-heading" className="text-heading-sm text-fg">
+              Sales · last 30 days
+            </h3>
+            <Link to="/admin/reports" className="text-body-sm font-semibold text-primary-text">
+              Open reports
+            </Link>
+          </div>
+          <div className="flex flex-wrap items-end gap-10">
+            <Kpi label="Revenue" value={formatPHP(payload.sales.revenue)} />
+            <Kpi label="Paid orders" value={payload.sales.orders ?? 0} />
+            <Kpi label="Average order" value={formatPHP(payload.sales.average)} />
+          </div>
+        </section>
+      ) : null}
 
       <section className="flex flex-col gap-4" aria-labelledby="low-stock-heading">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -118,14 +136,17 @@ export default function Dashboard() {
                 className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted px-3 py-2"
               >
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-label font-semibold tabular-nums text-fg">
-                    #{order.id.slice(0, 8).toUpperCase()}
+                  <span className="flex flex-col">
+                    <span className="text-label font-semibold text-fg">
+                      {order.customer?.full_name?.trim() || order.customer?.phone || "Unnamed account"}
+                    </span>
+                    <span className="text-caption text-fg-muted tabular-nums">
+                      #{order.id.slice(0, 8).toUpperCase()} ·{" "}
+                      {order.fulfillment_type === "pickup" ? "Pickup" : "Delivery"} ·{" "}
+                      {formatDate(order.created_at)}
+                    </span>
                   </span>
                   <OrderStatusBadge status={order.status} />
-                  <span className="text-caption text-fg-muted">
-                    {order.fulfillment_type === "pickup" ? "Pickup" : "Delivery"} ·{" "}
-                    {formatDate(order.created_at)}
-                  </span>
                 </div>
                 <span className="text-label font-semibold tabular-nums text-fg">
                   {formatPHP(order.total_amount)}

@@ -1,14 +1,12 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Package, Truck } from "@phosphor-icons/react";
+import { Package } from "@phosphor-icons/react";
 import { api } from "@/lib/api.js";
 import { useAuth } from "@/lib/auth.jsx";
 import { useCart } from "@/lib/cart.jsx";
 import { useContent } from "@/lib/content.js";
-import { useApi } from "@/lib/useApi.js";
-import { asList, formatPHP } from "@/lib/format.js";
+import { formatPHP } from "@/lib/format.js";
 import { useOnline } from "@/lib/useOnline.js";
-import { estimateDeliveryFee } from "@/lib/fee.js";
 import { PAYMENT_METHODS, readOrderCreation } from "@/lib/orders.js";
 import {
   attachIntent,
@@ -19,18 +17,17 @@ import {
 } from "@/lib/paymongo.js";
 import Button from "../components/ui/Button.jsx";
 import Input from "../components/ui/Input.jsx";
-import MapPicker from "../components/MapPicker.jsx";
 import Stepper from "../components/Stepper.jsx";
 import { EmptyState } from "../components/AsyncState.jsx";
 import { cn } from "@/lib/cn.js";
 
-/* FR-5, FR-6, FR-19. Four steps on canvas, one at a time: fulfilment, address and
-   pin, payment, review (designtokens 12). */
-const STEPS = ["Fulfillment", "Address and pin", "Payment", "Review"];
-const EMPTY_ADDRESS = { street: "", barangay: "", municipality: "", province: "" };
+/* FR-5, FR-6, FR-19. Store pickup only: the store holds the order at the counter, so
+   there is no address, no pin and no delivery fee. Three steps on canvas, one at a
+   time (designtokens 12). */
+const STEPS = ["Pickup", "Payment", "Review"];
 const EMPTY_CARD = { card_number: "", expiry: "", cvc: "" };
 
-function OptionButton({ selected, onClick, icon: Icon, title, note, disabled = false }) {
+function OptionButton({ selected, onClick, title, note, disabled = false }) {
   return (
     <button
       type="button"
@@ -40,16 +37,9 @@ function OptionButton({ selected, onClick, icon: Icon, title, note, disabled = f
       className={cn(
         "flex flex-1 items-start gap-3 rounded-md p-4 text-left transition-colors duration-[var(--duration-fast)]",
         "disabled:pointer-events-none disabled:opacity-40",
-        selected ? "bg-primary-subtle ring-2 ring-primary" : "bg-muted hover:bg-muted/70",
+        selected ? "bg-primary-subtle text-primary-text" : "bg-muted hover:bg-muted/70",
       )}
     >
-      {Icon ? (
-        <Icon
-          size={24}
-          className={selected ? "text-primary-text" : "text-fg-muted"}
-          aria-hidden="true"
-        />
-      ) : null}
       <span className="flex flex-col gap-0.5">
         <span className="text-label font-semibold text-fg">{title}</span>
         {note ? <span className="text-caption text-fg-muted">{note}</span> : null}
@@ -62,49 +52,15 @@ export default function Checkout() {
   const { items, subtotal, clear } = useCart();
   const { profile } = useAuth();
   const content = useContent();
-  const addresses = useApi("/me/addresses");
   const navigate = useNavigate();
   const online = useOnline();
 
   const [step, setStep] = useState(0);
-  const [fulfillment, setFulfillment] = useState("delivery");
-  const [addressId, setAddressId] = useState(null);
-  const [newAddress, setNewAddress] = useState(EMPTY_ADDRESS);
-  const [pin, setPin] = useState(null);
   const [method, setMethod] = useState("cod");
   const [card, setCard] = useState(EMPTY_CARD);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState(null);
   const [placing, setPlacing] = useState(false);
-
-  const addressList = asList(addresses.data);
-
-  useEffect(() => {
-    if (addressId) return;
-    if (addressList.length === 0) return;
-    const preferred = addressList.find((address) => address.is_default) ?? addressList[0];
-    setAddressId(preferred.id);
-    if (preferred.latitude && preferred.longitude) {
-      setPin({ lat: Number(preferred.latitude), lng: Number(preferred.longitude) });
-    }
-    // addressList is derived from addresses.data, which is listed here.
-  }, [addresses.data, addressId, addressList]);
-
-  const selectedAddress = addressList.find((address) => address.id === addressId) ?? null;
-
-  const storePoint = content.store
-    ? { latitude: content.store.latitude, longitude: content.store.longitude }
-    : null;
-  const deliveryPin =
-    pin ?? (selectedAddress ? { lat: selectedAddress.latitude, lng: selectedAddress.longitude } : null);
-  const estimatedFee =
-    fulfillment === "delivery"
-      ? estimateDeliveryFee({ store: storePoint, pin: deliveryPin, rates: content.rates })
-      : 0;
-
-  const setAddressField = (field) => (event) => {
-    setNewAddress((current) => ({ ...current, [field]: event.target.value }));
-  };
 
   const setCardField = (field) => (event) => {
     setCard((current) => ({ ...current, [field]: event.target.value }));
@@ -113,18 +69,11 @@ export default function Checkout() {
   function validateStep(index) {
     const found = {};
 
-    if (index === 1 && fulfillment === "delivery" && !addressId) {
-      if (!newAddress.street.trim()) found.street = "Enter the street or purok.";
-      if (!newAddress.barangay.trim()) found.barangay = "Enter the barangay.";
-      if (!newAddress.municipality.trim()) found.municipality = "Enter the municipality or city.";
-      if (!newAddress.province.trim()) found.province = "Enter the province.";
+    if (index === 1 && method !== "cod" && !PAYMONGO_READY) {
+      found.payment = "Online payment is not configured yet. Choose cash on pickup.";
     }
 
-    if (index === 2 && method !== "cod" && !PAYMONGO_READY) {
-      found.payment = "Online payment is not configured yet. Choose cash on delivery.";
-    }
-
-    if (index === 2 && method === "card") {
+    if (index === 1 && method === "card") {
       if (card.card_number.replace(/\s+/g, "").length < 12) {
         found.card_number = "Enter the card number.";
       }
@@ -152,23 +101,9 @@ export default function Checkout() {
     setFormError(null);
 
     try {
-      let finalAddressId = fulfillment === "delivery" ? addressId : null;
-
-      if (fulfillment === "delivery" && !finalAddressId) {
-        const created = await api.post("/me/addresses", {
-          ...newAddress,
-          latitude: pin?.lat ?? null,
-          longitude: pin?.lng ?? null,
-          is_default: addressList.length === 0,
-        });
-        finalAddressId = (created?.data ?? created)?.id ?? null;
-        if (!finalAddressId) throw new Error("The delivery address could not be saved.");
-      }
-
       const response = await api.post("/orders", {
         items: items.map((item) => ({ product_id: item.id, qty: item.quantity })),
-        fulfillment_type: fulfillment,
-        address_id: finalAddressId,
+        fulfillment_type: "pickup",
         method,
       });
 
@@ -189,7 +124,7 @@ export default function Checkout() {
           replace: true,
           state: {
             paymentError:
-              "The order was created, but the store did not return a payment intent. Pay on delivery or contact the store.",
+              "The order was created, but the store did not return a payment intent. Pay when you collect it or contact the store.",
           },
         });
         return;
@@ -245,7 +180,7 @@ export default function Checkout() {
   if (items.length === 0) {
     return (
       <section className="mx-auto w-full max-w-[var(--container-content)] px-4 py-10 lg:px-10 lg:py-16">
-        <p className="text-eyebrow font-bold text-primary-text uppercase">Checkout</p>
+        <p className="inline-flex h-7 items-center rounded-full bg-primary-subtle px-3 text-caption font-semibold text-primary-text">Checkout</p>
         <h1 className="mt-2 text-display-lg text-fg">Checkout</h1>
         <EmptyState
           title="Nothing to check out"
@@ -266,7 +201,7 @@ export default function Checkout() {
   return (
     <section className="mx-auto w-full max-w-[var(--container-wide)] px-4 py-10 lg:px-10 lg:py-16">
       <header className="flex flex-col gap-2">
-        <p className="text-eyebrow font-bold text-primary-text uppercase">Checkout</p>
+        <p className="inline-flex h-7 items-center rounded-full bg-primary-subtle px-3 text-caption font-semibold text-primary-text">Checkout</p>
         <h1 className="text-display-lg text-fg">Complete your order</h1>
       </header>
 
@@ -278,126 +213,31 @@ export default function Checkout() {
         <div className="flex flex-col gap-6">
           {step === 0 ? (
             <div className="flex flex-col gap-4">
-              <h2 className="text-heading-sm text-fg">How should we get it to you?</h2>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <OptionButton
-                  selected={fulfillment === "delivery"}
-                  onClick={() => setFulfillment("delivery")}
-                  icon={Truck}
-                  title="Delivery"
-                  note="Distance-based fee, paid with the order."
-                />
-                <OptionButton
-                  selected={fulfillment === "pickup"}
-                  onClick={() => setFulfillment("pickup")}
-                  icon={Package}
-                  title="Store pickup"
-                  note="No delivery fee. Collect during store hours."
-                />
+              <h2 className="text-heading-sm text-fg">Collect from the store</h2>
+              <p className="text-body-md text-fg-muted">
+                Orders are held at the counter during store hours. There is no delivery
+                option and no delivery fee.
+              </p>
+
+              <div className="flex flex-col gap-1 rounded-md bg-muted p-4">
+                <p className="flex items-center gap-2 text-label font-semibold text-fg">
+                  <Package size={20} className="text-primary-text" aria-hidden="true" />
+                  {content.store?.address ?? "Store address is published on the Contact page."}
+                </p>
+                {content.store?.hours ? (
+                  <p className="text-body-sm text-fg-muted">{content.store.hours}</p>
+                ) : null}
+                <Link
+                  to="/contact"
+                  className="mt-1 text-label font-semibold text-primary-text hover:underline"
+                >
+                  Map and directions
+                </Link>
               </div>
             </div>
           ) : null}
 
           {step === 1 ? (
-            <div className="flex flex-col gap-4">
-              <h2 className="text-heading-sm text-fg">
-                {fulfillment === "delivery" ? "Where should we deliver?" : "Collect at the store"}
-              </h2>
-
-              {fulfillment === "pickup" ? (
-                <div className="flex flex-col gap-1 rounded-md bg-muted p-4">
-                  <p className="text-label font-semibold text-fg">
-                    {content.store?.address ?? "Store address is published on the Contact page."}
-                  </p>
-                  {content.store?.hours ? (
-                    <p className="text-body-sm text-fg-muted">{content.store.hours}</p>
-                  ) : null}
-                  <Link
-                    to="/contact"
-                    className="mt-1 text-label font-semibold text-primary-text hover:underline"
-                  >
-                    Map and directions
-                  </Link>
-                </div>
-              ) : (
-                <>
-                  {addressList.length > 0 ? (
-                    <div className="flex flex-col gap-2">
-                      {addressList.map((address) => (
-                        <OptionButton
-                          key={address.id}
-                          selected={addressId === address.id}
-                          onClick={() => {
-                            setAddressId(address.id);
-                            if (address.latitude && address.longitude) {
-                              setPin({ lat: Number(address.latitude), lng: Number(address.longitude) });
-                            }
-                          }}
-                          title={`${address.street}, ${address.barangay}`}
-                          note={`${address.municipality}, ${address.province}`}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-label font-semibold text-fg">
-                        {addressList.length > 0 ? "Or add a new address" : "Delivery address"}
-                      </p>
-                      {addressId ? (
-                        <button
-                          type="button"
-                          onClick={() => setAddressId(null)}
-                          className="text-caption font-semibold text-primary-text hover:underline"
-                        >
-                          Use a new address
-                        </button>
-                      ) : null}
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Input
-                        label="Street or purok"
-                        value={newAddress.street}
-                        onChange={setAddressField("street")}
-                        error={errors.street}
-                        disabled={Boolean(addressId)}
-                      />
-                      <Input
-                        label="Barangay"
-                        value={newAddress.barangay}
-                        onChange={setAddressField("barangay")}
-                        error={errors.barangay}
-                        disabled={Boolean(addressId)}
-                      />
-                      <Input
-                        label="Municipality or city"
-                        value={newAddress.municipality}
-                        onChange={setAddressField("municipality")}
-                        error={errors.municipality}
-                        disabled={Boolean(addressId)}
-                      />
-                      <Input
-                        label="Province"
-                        value={newAddress.province}
-                        onChange={setAddressField("province")}
-                        error={errors.province}
-                        disabled={Boolean(addressId)}
-                      />
-                    </div>
-
-                    <MapPicker value={pin} onChange={setPin} />
-                    <p className="text-caption text-fg-subtle">
-                      Pinning the exact spot helps the rider. The address alone is enough if you skip it.
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-          ) : null}
-
-          {step === 2 ? (
             <div className="flex flex-col gap-4">
               <h2 className="text-heading-sm text-fg">How would you like to pay?</h2>
               <div className="flex flex-col gap-2">
@@ -462,7 +302,7 @@ export default function Checkout() {
             </div>
           ) : null}
 
-          {step === 3 ? (
+          {step === 2 ? (
             <div className="flex flex-col gap-5">
               <h2 className="text-heading-sm text-fg">Check everything before placing it</h2>
 
@@ -483,18 +323,14 @@ export default function Checkout() {
               <dl className="flex flex-col gap-2 text-body-sm">
                 <div className="flex justify-between gap-3">
                   <dt className="text-fg-muted">Fulfillment</dt>
-                  <dd className="text-fg">{fulfillment === "delivery" ? "Delivery" : "Store pickup"}</dd>
+                  <dd className="text-fg">Store pickup</dd>
                 </div>
-                {fulfillment === "delivery" ? (
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-fg-muted">Deliver to</dt>
-                    <dd className="text-right text-fg">
-                      {selectedAddress
-                        ? `${selectedAddress.street}, ${selectedAddress.barangay}, ${selectedAddress.municipality}`
-                        : `${newAddress.street}, ${newAddress.barangay}, ${newAddress.municipality}`}
-                    </dd>
-                  </div>
-                ) : null}
+                <div className="flex justify-between gap-3">
+                  <dt className="text-fg-muted">Collect at</dt>
+                  <dd className="text-right text-fg">
+                    {content.store?.address ?? "AgriMart store"}
+                  </dd>
+                </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-fg-muted">Payment</dt>
                   <dd className="text-fg">
@@ -528,7 +364,7 @@ export default function Checkout() {
                 </p>
               )}
               <p className="text-caption text-fg-subtle">
-                Prices, stock and the delivery fee are confirmed by the store when the order is placed.
+                Prices and stock are confirmed by the store when the order is placed.
               </p>
             </div>
           ) : null}
@@ -556,25 +392,15 @@ export default function Checkout() {
             <span className="text-fg tabular-nums">{formatPHP(subtotal)}</span>
           </div>
           <div className="flex items-center justify-between text-body-sm text-fg-muted">
-            <span>{fulfillment === "delivery" ? "Delivery (estimate)" : "Pickup"}</span>
-            <span className="text-fg tabular-nums">
-              {fulfillment === "pickup"
-                ? "Free"
-                : estimatedFee === null
-                  ? "Set by the store"
-                  : formatPHP(estimatedFee)}
-            </span>
+            <span>Pickup</span>
+            <span className="text-fg tabular-nums">Free</span>
           </div>
           <div className="flex items-center justify-between text-body-md font-semibold text-fg">
             <span>Total (estimate)</span>
-            <span className="tabular-nums">
-              {fulfillment === "delivery" && estimatedFee === null
-                ? "Set by the store"
-                : formatPHP(subtotal + (estimatedFee ?? 0))}
-            </span>
+            <span className="tabular-nums">{formatPHP(subtotal)}</span>
           </div>
           <p className="text-caption text-fg-subtle">
-            The final total is recalculated by the store from live prices, stock and distance.
+            The final total is recalculated by the store from live prices and stock.
           </p>
         </aside>
       </div>

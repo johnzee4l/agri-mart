@@ -16,6 +16,10 @@ import { notifyOrderPaid } from "../lib/pushEvents.js";
 
 export const paymentsRouter = Router();
 
+/* The stages where the shelf has been committed. A paid webhook may arrive after a
+   staff move, so settlement follows the order's current stage, not just pending. */
+const DEDUCTED_STATUSES = new Set(["paid", "preparing", "out_for_delivery", "completed"]);
+
 /** Parses "t=...,te=...,li=..." into its parts. */
 export function parseSignatureHeader(header) {
   return String(header ?? "")
@@ -90,6 +94,9 @@ paymentsRouter.post("/webhook", async (req, res) => {
     return res.json({ received: true, status: "failed" });
   }
 
+  const wasAlreadyPaid = payment.status === "paid";
+
+  // Conditional update: two deliveries racing can only settle one payment row.
   const { error: paidError } = await supabase()
     .from("payments")
     .update({ status: "paid", paid_at: new Date().toISOString() })
@@ -98,48 +105,92 @@ paymentsRouter.post("/webhook", async (req, res) => {
 
   if (paidError) throw new ApiError(500, "Could not mark the payment paid");
 
-  await supabase()
+  const { data: order, error: orderError } = await supabase()
     .from("orders")
-    .update({ status: "paid" })
-    .eq("id", payment.order_id)
-    .eq("status", "pending");
-
-  const { data: lowProducts, error: stockError } = await supabase().rpc("deduct_stock", {
-    order_id: payment.order_id,
-  });
-
-  if (stockError) throw new ApiError(500, "Could not deduct stock");
-
-  notifyLowStock(lowProducts).catch(() => 0);
-
-  const { data: items } = await supabase()
-    .from("order_items")
-    .select("product_id")
-    .eq("order_id", payment.order_id);
-
-  const productIds = [...new Set((items ?? []).map((item) => item.product_id))];
-  if (productIds.length > 0) {
-    const { data: products } = await supabase()
-      .from("products")
-      .select("id, stock_qty")
-      .in("id", productIds);
-    emitStock(products ?? []);
-  }
-
-  const { data: order } = await supabase()
-    .from("orders")
-    .select("*")
+    .select("id, user_id, status, stock_deducted, total_amount")
     .eq("id", payment.order_id)
     .maybeSingle();
 
-  if (order) {
-    // Staff and admins learn that packing can start (blueprint 6.2).
-    notifyOrderPaid({ order, method: payment.method }).catch(() => 0);
+  if (orderError) throw new ApiError(500, "Could not load the paid order");
+  if (!order) return res.json({ received: true, ignored: "order not found" });
 
-    getUserEmail(order.user_id)
-      .then((email) => sendOrderStatus({ to: email, order }))
+  /* Money can arrive after a customer cancels. Record the settled payment but never
+     push stock out for an order that will not ship; the store refunds it. */
+  if (order.status === "cancelled") {
+    console.error("[payments] paid webhook for a cancelled order:", order.id);
+    return res.json({ received: true, status: "paid", ignored: "order cancelled" });
+  }
+
+  let movedToPaid = false;
+
+  if (order.status === "pending") {
+    const { data: transitioned, error: transitionError } = await supabase()
+      .from("orders")
+      .update({ status: "paid" })
+      .eq("id", order.id)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+
+    if (transitionError) throw new ApiError(500, "Could not mark the order paid");
+    movedToPaid = Boolean(transitioned);
+  }
+
+  const settled = movedToPaid || DEDUCTED_STATUSES.has(order.status);
+
+  if (settled && !order.stock_deducted) {
+    const { data: lowProducts, error: stockError } = await supabase().rpc("deduct_stock", {
+      order_id: order.id,
+    });
+
+    if (stockError) {
+      // Keep the order out of the paid stage until the shelf can cover it. PayMongo
+      // retries the webhook, and the next delivery settles the stock.
+      if (movedToPaid) {
+        await supabase()
+          .from("orders")
+          .update({ status: "pending" })
+          .eq("id", order.id)
+          .eq("status", "paid");
+      }
+      throw new ApiError(409, `Payment received but stock could not be deducted: ${stockError.message}`);
+    }
+
+    notifyLowStock(lowProducts).catch(() => 0);
+
+    const { data: items } = await supabase()
+      .from("order_items")
+      .select("product_id")
+      .eq("order_id", order.id);
+
+    const productIds = [...new Set((items ?? []).map((item) => item.product_id))];
+    if (productIds.length > 0) {
+      const { data: products } = await supabase()
+        .from("products")
+        .select("id, stock_qty")
+        .in("id", productIds);
+      emitStock(products ?? []);
+    }
+  }
+
+  const { data: settledOrder } = await supabase()
+    .from("orders")
+    .select("*")
+    .eq("id", order.id)
+    .maybeSingle();
+
+  if (settledOrder) {
+    // Staff and admins learn that packing can start (blueprint 6.2).
+    notifyOrderPaid({ order: settledOrder, method: payment.method }).catch(() => 0);
+
+    getUserEmail(settledOrder.user_id)
+      .then((email) => sendOrderStatus({ to: email, order: settledOrder }))
       .catch(() => false);
   }
 
-  res.json({ received: true, status: "paid" });
+  return res.json({
+    received: true,
+    status: "paid",
+    ...(wasAlreadyPaid ? { duplicate: true } : {}),
+  });
 });

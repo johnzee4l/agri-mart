@@ -1,8 +1,9 @@
 import { useId } from "react";
 import { cn } from "@/lib/cn.js";
 
-/* Field wrapper. The field edge is the only permitted border (designtokens.md 8.4). */
-export default function Input({ label, hint, error, className, id, ...rest }) {
+/* Field wrapper. Fields are borderless: a muted fill carries the shape, so nothing
+   on the page draws a line around a control. */
+export default function Input({ label, hint, error, className, id, endAdornment, ...rest }) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const describedBy = error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined;
@@ -15,20 +16,28 @@ export default function Input({ label, hint, error, className, id, ...rest }) {
         </label>
       ) : null}
 
-      <input
-        id={inputId}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy}
-        className={cn(
-          "h-[var(--control-md)] w-full rounded-md bg-surface px-3.5 text-base text-fg",
-          "ring-1 ring-inset ring-field-edge",
-          "placeholder:text-fg-subtle",
-          "disabled:pointer-events-none disabled:opacity-40",
-          error && "ring-2 ring-danger-fill",
-          className,
-        )}
-        {...rest}
-      />
+      <div className="relative">
+        <input
+          id={inputId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
+          className={cn(
+            "h-[var(--control-md)] w-full rounded-md bg-muted px-3.5 text-base text-fg",
+            "transition-colors duration-[var(--duration-fast)] ease-standard",
+            "placeholder:text-fg-subtle",
+            "focus:outline-none",
+            "disabled:pointer-events-none disabled:opacity-40",
+            endAdornment && "pr-12",
+            error && "bg-danger-subtle",
+            className,
+          )}
+          {...rest}
+        />
+
+        {endAdornment ? (
+          <span className="absolute inset-y-0 right-1 flex items-center">{endAdornment}</span>
+        ) : null}
+      </div>
 
       {error ? (
         <p id={`${inputId}-error`} role="alert" className="text-caption text-danger-text">

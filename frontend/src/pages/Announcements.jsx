@@ -14,7 +14,7 @@ export default function Announcements() {
   return (
     <section className="mx-auto w-full max-w-[var(--container-content)] px-4 py-10 lg:px-10 lg:py-16">
       <header className="flex flex-col gap-2">
-        <p className="text-eyebrow font-bold text-primary-text uppercase">Store news</p>
+        <p className="inline-flex h-7 items-center rounded-full bg-primary-subtle px-3 text-caption font-semibold text-primary-text">Store news</p>
         <h1 className="text-display-lg text-fg">Announcements</h1>
         <p className="text-body-sm text-fg-muted">
           Promos, planting reminders and product advisories from the store.
@@ -34,7 +34,7 @@ export default function Announcements() {
 
         {pinned ? (
           <article className="flex flex-col gap-2 rounded-xl bg-surface p-6">
-            <p className="text-caption text-accent-text uppercase">Pinned</p>
+            <p className="text-caption text-highlight-text uppercase">Pinned</p>
             <h2 className="text-heading-md text-fg">{pinned.title}</h2>
             <p className="text-caption text-fg-subtle">{formatDate(pinned.published_at)}</p>
             <p className="max-w-[65ch] text-body-md text-fg-muted">{pinned.body}</p>

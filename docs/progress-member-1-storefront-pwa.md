@@ -8,6 +8,8 @@
 | Gates you sign | 1, 2, 3, 4, 5 |
 | Overview | `progress-00-overview.md` |
 
+> **Working-tree status (15 Nov 2026):** Phases 1 to 5 are implemented and the client builds locally. The checkboxes below still record merge and gate sign-off, so they stay open until the work lands on `main` and the deployed checks pass. `README.md` has the feature summary.
+
 ---
 
 ## 1. Phase Progress
@@ -86,8 +88,8 @@ Tick when the provider task is merged. Do not start the dependent task before th
 
 - [ ] `[BP]` `Account.jsx`: profile edit and saved addresses with add, edit, and archive (FR-15).
 - [ ] `[BP]` Order history with status tracker (order stepper component) and cancel-while-pending (FR-8).
-- [ ] `[BP]` `Contact.jsx`: Google Map with store pin, address, and hours (FR-19).
-- [ ] `[BP]` `lib/socket.js`: connect with the access token, listen for `stock`, update product pages live. Blocked by D6.
+- [ ] `[BP]` `Contact.jsx`: Leaflet/OpenStreetMap map with the store pin, address and hours (FR-19). No map API key.
+- [ ] `[BP]` `lib/liveStock.jsx` over `lib/socket.js`: connect with the access token, listen for `stock`, and update product cards and the detail page live. Blocked by D6.
 - [ ] `[DT]` Stock flash on live change. Announce with `aria-live="polite"` (designtokens 13).
 - [ ] `[BP]` Mount `ChatBox` (from Member 3) in the layout for logged-in customers. Blocked by D8.
 - [ ] `[ADD]` Notification toggle placeholder in Account. It is wired in Phase 5.

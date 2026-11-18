@@ -3,12 +3,14 @@ import { AnimatePresence, m } from "motion/react";
 import { Check } from "@phosphor-icons/react";
 import Button from "./ui/Button.jsx";
 import { useCart } from "@/lib/cart.jsx";
+import { useAuth } from "@/lib/auth.jsx";
 import { stockStatus } from "@/lib/catalog.js";
 
 /* FR-4 with the add-to-cart morph (designtokens 9.3): the label crossfades to a
    check and the cart badge scales in the navbar. */
 export default function AddToCartButton({ product, size = "md", className }) {
   const { add } = useCart();
+  const { isAuthenticated } = useAuth();
   const [added, setAdded] = useState(false);
   const timer = useRef(null);
 
@@ -17,11 +19,14 @@ export default function AddToCartButton({ product, size = "md", className }) {
   const soldOut = stockStatus(product) === "out";
 
   const handleAdd = () => {
+    if (!isAuthenticated) return;
     add(product, 1);
     setAdded(true);
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setAdded(false), 1600);
   };
+
+  if (!isAuthenticated) return null;
 
   return (
     <Button

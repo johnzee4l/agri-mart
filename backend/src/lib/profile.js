@@ -16,6 +16,28 @@ export async function getProfile(userId) {
   return data;
 }
 
+/* Lists name people, not ids. One batched profile read per page of rows, then the
+   caller merges the name in, so staff read "Maria Santos" instead of 7cfba8c2. */
+export async function userProfiles(userIds) {
+  const ids = [...new Set((userIds ?? []).filter(Boolean))];
+  if (ids.length === 0) return new Map();
+
+  const { data, error } = await supabase()
+    .from("profiles")
+    .select("id, full_name, phone")
+    .in("id", ids);
+
+  if (error) throw new ApiError(500, "Could not load the account names");
+
+  return new Map((data ?? []).map((profile) => [profile.id, profile]));
+}
+
+export async function withUserProfiles(rows, field = "customer") {
+  const list = rows ?? [];
+  const profiles = await userProfiles(list.map((row) => row.user_id));
+  return list.map((row) => ({ ...row, [field]: profiles.get(row.user_id) ?? null }));
+}
+
 /** Every active admin, for the low-stock alert (FR-10). */
 export async function getAdminEmails() {
   const { data, error } = await supabase()

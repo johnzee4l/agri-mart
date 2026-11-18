@@ -14,7 +14,7 @@ export default function Contact() {
   return (
     <section className="mx-auto w-full max-w-[var(--container-content)] px-4 py-10 lg:px-10 lg:py-16">
       <header className="flex flex-col gap-2">
-        <p className="text-eyebrow font-bold text-primary-text uppercase">Visit the store</p>
+        <p className="inline-flex h-7 items-center rounded-full bg-primary-subtle px-3 text-caption font-semibold text-primary-text">Visit the store</p>
         <h1 className="text-display-lg text-fg">Contact and store locator</h1>
       </header>
 
@@ -70,7 +70,7 @@ export default function Contact() {
           <p className="text-label font-semibold text-fg">Ordering questions</p>
           <p className="max-w-[60ch] text-body-sm text-fg-muted">
             Ask through chat once you are signed in, or check the announcements page for holiday
-            hours and delivery advisories.
+            hours and store advisories.
           </p>
           <Link to="/announcements" className="text-label font-semibold text-primary-text hover:underline">
             Read announcements

@@ -1,7 +1,8 @@
 import { lazy, Suspense } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, useLocation } from "react-router-dom";
 
 import Navbar from "./components/Navbar.jsx";
+import MobileNav from "./components/MobileNav.jsx";
 import RequireRole from "./components/RequireRole.jsx";
 /* domMax powers the tile-to-detail morph, so it belongs with the storefront routes
    rather than the entry chunk. */
@@ -13,7 +14,6 @@ import OfflineBanner from "./components/OfflineBanner.jsx";
 /* The install sheet pulls in the Base UI drawer, so it stays out of the entry chunk. */
 const InstallSheet = lazy(() => import("./components/InstallSheet.jsx"));
 import { useAuth } from "./lib/auth.jsx";
-import { useOnline } from "./lib/useOnline.js";
 
 /* Route-level code splitting (blueprint NFR: 3 s load on mobile, designtokens 3).
    Each page is its own chunk; the shell, tokens and UI wrappers stay in the entry. */
@@ -27,6 +27,7 @@ const Account = lazy(() => import("./pages/Account.jsx"));
 const Announcements = lazy(() => import("./pages/Announcements.jsx"));
 const Contact = lazy(() => import("./pages/Contact.jsx"));
 const OrderResult = lazy(() => import("./pages/OrderResult.jsx"));
+const NotFound = lazy(() => import("./pages/NotFound.jsx"));
 
 const AdminLayout = lazy(() => import("./admin/AdminLayout.jsx"));
 const Dashboard = lazy(() => import("./admin/Dashboard.jsx"));
@@ -49,10 +50,10 @@ const ChatBox = chatViews["./components/ChatBox.jsx"]
 
 function CustomerChat() {
   const { isAuthenticated, role, loading } = useAuth();
-  const online = useOnline();
 
-  // Logged-in customers only, and never while offline (designtokens 15).
-  if (!ChatBox || loading || !isAuthenticated || role !== "customer" || !online) return null;
+  /* Logged-in customers only. The panel mounts offline too, so "Ask the store" still
+     opens and explains that messages are paused instead of doing nothing. */
+  if (!ChatBox || loading || !isAuthenticated || role !== "customer") return null;
 
   return (
     <Suspense fallback={null}>
@@ -72,18 +73,31 @@ function RouteFallback() {
 /* Route skeleton + role guards (blueprint 7.1). Storefront routes share one domMax
    provider so the product tile to detail morph stays continuous (DR-P2). */
 export default function App() {
+  const { pathname } = useLocation();
+  const showMobileNav = !pathname.startsWith("/admin");
+
   return (
     <div className="min-h-dvh bg-canvas">
       <Navbar />
 
-      <main id="main">
+      <main
+        id="main"
+        className={showMobileNav ? "pb-[calc(var(--mobile-nav-height)+env(safe-area-inset-bottom))] md:pb-0" : undefined}
+      >
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route element={<MorphLayout />}>
               <Route path="/" element={<Home />} />
               <Route path="/products" element={<Products />} />
               <Route path="/products/:id" element={<ProductDetail />} />
-              <Route path="/cart" element={<Cart />} />
+              <Route
+                path="/cart"
+                element={
+                  <RequireRole>
+                    <Cart />
+                  </RequireRole>
+                }
+              />
               <Route
                 path="/checkout"
                 element={
@@ -114,6 +128,7 @@ export default function App() {
                   </RequireRole>
                 }
               />
+              <Route path="*" element={<NotFound />} />
             </Route>
 
             <Route
@@ -168,11 +183,13 @@ export default function App() {
                 }
               />
               <Route path="chat" element={<Chat />} />
+              <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>
         </Suspense>
       </main>
 
+      <MobileNav />
       <OfflineBanner />
       <Suspense fallback={null}>
         <InstallSheet />

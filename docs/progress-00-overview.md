@@ -6,7 +6,7 @@
 | Members | Member 1: Storefront and PWA · Member 2: Backend · Member 3: Database, Admin and Chat |
 | Member files | `progress-member-1-storefront-pwa.md`, `progress-member-2-backend.md`, `progress-member-3-database-admin-chat.md` |
 | Plan version | 1.0, 11 Nov 2026 |
-| Project status | ______________ (Not started / Phase N in progress / Complete) |
+| Project status | Phase 5 in progress: code complete locally, deployment and gate QA pending |
 
 ---
 
@@ -58,7 +58,7 @@
 ### 2.1 Phase 0 kickoff checklist
 
 - [ ] Repository created and access granted to all three members (Member 3)
-- [ ] Everyone has Node.js 20+, Git, and accounts for Supabase, Render, PayMongo sandbox, and Google Maps (all)
+- [ ] Everyone has Node.js 20+, Git, and accounts for Supabase, Render and PayMongo sandbox. Maps need no account or API key (all)
 - [ ] Everyone has read `blueprint.md` and `designtokens.md` (all)
 - [ ] Decision D2 (coss ui primitive layer) and proposed changes C1 to C5 reviewed (all)
 - [ ] Branch naming and PR rules from section 6 agreed (all)

@@ -6,7 +6,7 @@ Source of truth for scope, requirements and design: [`docs/blueprint.md`](docs/b
 
 ## Status
 
-**Phase 1 (Foundation) scaffold only.** The monorepo structure, token layer, API client, auth context, route skeleton and backend shell exist. Feature work (catalog, orders, payments, inventory, reports, chat, PWA, push) is intentionally not implemented; every planned endpoint answers `501` until its phase lands.
+**Feature complete through Phase 5.** The storefront includes catalog, cart, checkout (PayMongo + COD), accounts and addresses, order tracking, announcements and contact. The admin console covers products, inventory, orders, announcements, site content, users, reports and live chat. Real-time stock and customer chat run over Socket.IO, push notifications work through a service worker, and the app is installable with a limited offline catalog. Maps use Leaflet with OpenStreetMap tiles, so **no map API key is required**.
 
 ## Setup in 5 steps
 
@@ -31,16 +31,19 @@ Source of truth for scope, requirements and design: [`docs/blueprint.md`](docs/b
       Admin uploads write there and the storefront reads the public URL.
    2. Apply the migrations in `database/migrations/` **in order**: `001_schema.sql`
       (tables, indexes, RLS), `002_functions.sql` (trigger and stock functions),
-      `003_seed.sql` (categories, ten sample products, site content). Either paste each
-      file into the project's SQL editor, or use `psql` with the direct connection string:
+      `003_seed.sql` (categories, ten sample products, site content) and
+      `004_phase5_fixes.sql` (product sale prices and one-time announcement notices).
+      Either paste each file into the project's SQL editor, or use `psql` with the direct
+      connection string:
 
       ```bash
       psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/001_schema.sql
       psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/002_functions.sql
       psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/003_seed.sql
+      psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/004_phase5_fixes.sql
       ```
 
-      All three are safe to re-run. `docs/diagrams/er-diagram.md` shows what they create.
+      All four are safe to re-run. `docs/diagrams/er-diagram.md` shows what they create.
    3. Promote the first admin: signup only ever creates a customer, so the first one is
       promoted in the database, with the statement at the bottom of `003_seed.sql`:
 
@@ -76,6 +79,23 @@ Source of truth for scope, requirements and design: [`docs/blueprint.md`](docs/b
 
 5. **Confirm the wiring**: the storefront navbar shows `API online` when `/api/health` answers.
 
+### Local demo accounts
+
+For a local Supabase stack, with `backend/.env` pointing at it:
+
+```bash
+npm run seed:demo --prefix backend
+```
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Customer | `customer@agrimart.local` | `Customer123!` |
+| Staff | `staff@agrimart.local` | `Staff123!` |
+| Admin | `admin@agrimart.local` | `Admin123!` |
+
+The script confirms the emails, so sign-in works without SMTP, and adds one saved address
+to the demo customer. It is a development helper only; never run it against production.
+
 ## Structure
 
 ```
@@ -84,7 +104,7 @@ frontend/     Vite + React. src/pages (storefront), src/admin (admin panel),
               src/styles (token layer), src/lib (api, auth, cn)
 backend/      Express 5 + Socket.IO. src/routes is one file per resource,
               src/lib holds supabase.js, src/chat.js is the socket attach point
-database/     migrations/ (schema, functions, seed) and tests/ (RLS verification)
+database/     migrations/ (schema, functions, seed, follow-ups) and tests/ (RLS verification)
 docs/         blueprint, design tokens, member plans, api.md, diagrams/
 ```
 

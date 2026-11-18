@@ -1,0 +1,45 @@
+/* Patterns (designtokens.md 8.6, 17.6). Furrow is a signal, not wallpaper:
+   allowed on image wells, empty states and the hero only. */
+:root {
+  --furrow-line: color-mix(in oklab, var(--viz-ghost) 80%, transparent);
+  --furrow-angle: 45deg;
+  --furrow-gap: 6px;
+
+  --pattern-furrow: repeating-linear-gradient(
+    var(--furrow-angle),
+    var(--furrow-line) 0 1.5px,
+    transparent 1.5px var(--furrow-gap)
+  );
+  --pattern-seed-grid: radial-gradient(
+    color-mix(in oklab, var(--soil-300) 50%, transparent) 1px,
+    transparent 1.5px
+  );
+  --pattern-halftone: radial-gradient(
+    color-mix(in oklab, var(--soil-500) 25%, transparent) 1.2px,
+    transparent 1.8px
+  );
+}
+
+.furrow {
+  background-image: var(--pattern-furrow);
+}
+
+.seed-grid {
+  background-image: var(--pattern-seed-grid);
+  background-size: 24px 24px;
+}
+
+.halftone {
+  background-image: var(--pattern-halftone);
+  background-size: 10px 10px;
+  mask-image: linear-gradient(to right, transparent 35%, #000);
+}
+
+@media (forced-colors: active) {
+  .furrow,
+  .seed-grid,
+  .halftone {
+    background-image: none;
+    mask-image: none;
+  }
+}

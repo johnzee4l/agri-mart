@@ -3,19 +3,20 @@ import { CircleNotch } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn.js";
 import { useSpringPreset } from "@/styles/tokens/motion.js";
 
-/* The only button import point (designtokens.md 11.2). */
+/* The only button import point (designtokens.md 11.1, 11.6). */
 const variants = {
   primary: "bg-primary text-on-primary hover:bg-primary-hover active:bg-primary-pressed",
-  accent: "bg-accent text-on-accent hover:bg-accent-hover",
+  highlight: "bg-highlight text-on-highlight hover:bg-highlight-hover",
+  inverse: "bg-tile-inverse text-on-inverse hover:opacity-90",
   secondary: "bg-primary-subtle text-primary-text hover:bg-primary-subtle/70",
   ghost: "bg-transparent text-fg hover:bg-muted",
   danger: "bg-danger-fill text-on-danger hover:bg-danger-hover",
 };
 
 const sizes = {
+  sm: "h-[var(--control-sm)] px-4 text-body-sm",
   md: "h-[var(--control-md)] px-5",
-  sm: "h-[var(--control-sm)] px-4 text-caption",
-  lg: "h-[var(--control-lg)] px-6",
+  lg: "h-[var(--control-lg)] px-7 text-body-lg",
 };
 
 export default function Button({
@@ -45,7 +46,11 @@ export default function Button({
       )}
       {...rest}
     >
-      {loading ? <CircleNotch size={20} weight="bold" className="animate-spin" aria-hidden="true" /> : children}
+      {loading ? (
+        <CircleNotch size={20} weight="bold" className="animate-spin" aria-hidden="true" />
+      ) : (
+        children
+      )}
     </m.button>
   );
 }

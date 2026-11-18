@@ -4,16 +4,17 @@ import { z } from "zod";
 import { ApiError } from "../lib/errors.js";
 import { supabase } from "../lib/supabase.js";
 import { auth, requireRole, validate } from "../middleware.js";
-import { computeDeliveryFee, roundMoney } from "../lib/fee.js";
+import { roundMoney } from "../lib/fee.js";
 import { createPaymentIntent, paymongoConfigured } from "../lib/paymongo.js";
 import { emitStock } from "../lib/realtime.js";
 import { sendOrderConfirmation, sendOrderStatus } from "../lib/mailer.js";
 import { notifyLowStock } from "../lib/lowStock.js";
-import { getUserEmail } from "../lib/profile.js";
+import { getUserEmail, withUserProfiles } from "../lib/profile.js";
 import { notifyNewOrder, notifyOrderStatus } from "../lib/pushEvents.js";
 
-/* FR-5, FR-8, FR-9. Orders. Prices, stock, the delivery fee and item availability
-   are all decided here, never from the request body (blueprint 6.4). */
+/* FR-5, FR-8, FR-9. Orders. Prices, stock and item availability are all decided here,
+   never from the request body (blueprint 6.4). The store is pickup only: no address and
+   no delivery fee, and a delivery request is refused rather than silently downgraded. */
 
 export const ordersRouter = Router();
 
@@ -37,6 +38,10 @@ const TRANSITIONS = {
 
 const ONLINE_METHODS = new Set(["gcash", "card", "grab_pay"]);
 
+/* A paid order is the point where stock is committed. The webhook settles online
+   payments; COD settles when the counter confirms it. */
+const DEDUCTED_STATUSES = new Set(["paid", "preparing", "out_for_delivery", "completed"]);
+
 /* `from`/`to` go straight into the PostgREST filter, so a malformed date has to be a
    400 here instead of a database error that reads like a server fault. */
 const dateParam = z
@@ -59,35 +64,6 @@ function readPaging(query) {
   return { page, limit };
 }
 
-async function loadRates() {
-  const { data, error } = await supabase()
-    .from("site_content")
-    .select("key, value")
-    .in("key", ["store_location", "delivery_rates"]);
-
-  if (error) throw new ApiError(500, "Could not load the delivery settings");
-
-  const content = {};
-  for (const row of data ?? []) content[row.key] = row.value;
-
-  return { store: content.store_location ?? null, rates: content.delivery_rates ?? null };
-}
-
-async function ownAddress(userId, addressId) {
-  const { data, error } = await supabase()
-    .from("addresses")
-    .select("id, latitude, longitude")
-    .eq("id", addressId)
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (error) throw new ApiError(500, "Could not load that address");
-  if (!data) throw new ApiError(404, "Address not found");
-
-  return data;
-}
-
 async function loadOrder(orderId, user) {
   let query = supabase().from("orders").select(ORDER_SELECT).eq("id", orderId);
   if (!isStaff(user)) query = query.eq("user_id", user.id);
@@ -96,13 +72,21 @@ async function loadOrder(orderId, user) {
   if (error) throw new ApiError(500, "Could not load that order");
   if (!data) throw new ApiError(404, "Order not found");
 
-  return data;
+  const [order] = await withUserProfiles([data]);
+  return order;
 }
 
 /** Calls the SQL function once; stock_deducted inside it makes that safe. */
 async function deductStock(orderId) {
   const { data, error } = await supabase().rpc("deduct_stock", { order_id: orderId });
   if (error) throw new ApiError(409, error.message);
+  return data ?? [];
+}
+
+/** Returns every line to the shelf once, for a cancellation after stock moved. */
+async function restockOrder(orderId) {
+  const { data, error } = await supabase().rpc("restock_order", { order_id: orderId });
+  if (error) throw new ApiError(500, "Could not return the stock to the shelf");
   return data ?? [];
 }
 
@@ -124,9 +108,9 @@ async function broadcastStock(orderId) {
   emitStock(products ?? []);
 }
 
-function assertTransition(order, next, method) {
+function assertTransition(order, next, payment) {
   if (next === "preparing" && order.status === "pending") {
-    if (method !== "cod") {
+    if (payment?.method !== "cod") {
       throw new ApiError(409, "Online orders must be paid before preparing.");
     }
     return;
@@ -134,6 +118,12 @@ function assertTransition(order, next, method) {
 
   if (!TRANSITIONS[order.status]?.includes(next)) {
     throw new ApiError(409, `Cannot move an order from ${order.status} to ${next}.`);
+  }
+
+  /* `paid` is a payment fact, never a manual shortcut. A webhook normally writes it;
+     this only lets staff recover an order whose payment row is already settled. */
+  if (next === "paid" && payment?.status !== "paid") {
+    throw new ApiError(409, "That payment has not been confirmed yet.");
   }
 
   if (next === "out_for_delivery" && order.fulfillment_type === "pickup") {
@@ -154,13 +144,16 @@ ordersRouter.post(
         )
         .min(1, "Add at least one item.")
         .max(50, "Split large orders into more than one."),
-      fulfillment_type: z.enum(["delivery", "pickup"]),
-      address_id: z.uuid("Choose a delivery address.").nullable().optional(),
+      fulfillment_type: z.enum(["delivery", "pickup"]).optional(),
       method: z.enum(["cod", "gcash", "card", "grab_pay"]),
     }),
   }),
   async (req, res) => {
-    const { items, fulfillment_type, address_id, method } = req.validated.body;
+    const { items, fulfillment_type = "pickup", method } = req.validated.body;
+
+    if (fulfillment_type !== "pickup") {
+      throw new ApiError(400, "The store only offers store pickup.");
+    }
 
     // Combine repeats so one line cannot slip past the stock check.
     const wanted = new Map();
@@ -215,26 +208,7 @@ ordersRouter.post(
 
     const subtotal = roundMoney(lines.reduce((sum, line) => sum + line.subtotal, 0));
 
-    let address = null;
-    let deliveryFee = 0;
-
-    if (fulfillment_type === "delivery") {
-      if (!address_id) {
-        throw new ApiError(400, "Validation failed", [
-          { path: "address_id", message: "Choose or add a delivery address." },
-        ]);
-      }
-
-      address = await ownAddress(req.user.id, address_id);
-      const { store, rates } = await loadRates();
-      deliveryFee = computeDeliveryFee({
-        store,
-        destination: { latitude: address.latitude, longitude: address.longitude },
-        rates,
-      });
-    }
-
-    const total = roundMoney(subtotal + deliveryFee);
+    const total = subtotal;
 
     // Fail before writing an order that could never be paid.
     if (ONLINE_METHODS.has(method) && !paymongoConfigured()) {
@@ -254,9 +228,9 @@ ordersRouter.post(
       .from("orders")
       .insert({
         user_id: req.user.id,
-        address_id: fulfillment_type === "delivery" ? address_id : null,
-        fulfillment_type,
-        delivery_fee: deliveryFee,
+        address_id: null,
+        fulfillment_type: "pickup",
+        delivery_fee: 0,
         total_amount: total,
         status: "pending",
       })
@@ -326,12 +300,27 @@ ordersRouter.get("/", validate({ query: rangeQuery }), async (req, res) => {
     ]);
   }
 
-  let query = supabase().from("orders").select("*, payments(method, status)", { count: "exact" });
+  let query = supabase()
+    .from("orders")
+    .select("*, payments(method, status), order_items(quantity, products(name))", { count: "exact" });
   if (!isStaff(req.user)) query = query.eq("user_id", req.user.id);
 
   if (status) query = query.eq("status", status);
   if (req.query.from) query = query.gte("created_at", String(req.query.from));
-  if (req.query.to) query = query.lte("created_at", String(req.query.to));
+
+  /* A bare date includes the whole day: compare against the next midnight instead
+     of dropping every order placed after 00:00 that day. */
+  if (req.query.to) {
+    const raw = String(req.query.to);
+    const nextDay = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+      ? new Date(`${raw}T00:00:00.000Z`).getTime() + 24 * 60 * 60 * 1000
+      : null;
+
+    query =
+      nextDay === null
+        ? query.lte("created_at", raw)
+        : query.lt("created_at", new Date(nextDay).toISOString());
+  }
 
   const { data, error, count } = await query
     .order("created_at", { ascending: false })
@@ -339,7 +328,7 @@ ordersRouter.get("/", validate({ query: rangeQuery }), async (req, res) => {
 
   if (error) throw new ApiError(500, "Could not load orders");
 
-  res.json({ data: data ?? [], page, total: count ?? 0 });
+  res.json({ data: await withUserProfiles(data), page, total: count ?? 0 });
 });
 
 ordersRouter.get("/:id", validate({ params: idParams }), async (req, res) => {
@@ -372,7 +361,87 @@ ordersRouter.post("/:id/cancel", validate({ params: idParams }), async (req, res
     .eq("order_id", order.id)
     .eq("status", "pending");
 
+  /* A pending order normally has no stock movement, but a retried payment can leave
+     one deducted. Returning it keeps the catalog honest. */
+  if (order.stock_deducted) {
+    try {
+      const returned = await restockOrder(order.id);
+      if (returned.length > 0) broadcastStock(order.id);
+    } catch (restockError) {
+      console.error("[orders] restock after cancel failed:", restockError.message);
+    }
+  }
+
   res.json({ data: updated });
+});
+
+/* A failed or interrupted online payment leaves the order pending. This makes a
+   fresh PayMongo intent for that same order, so retrying never duplicates the
+   basket. Prices and items stay exactly as they were at checkout. */
+ordersRouter.post("/:id/pay", validate({ params: idParams }), async (req, res) => {
+  const order = await loadOrder(req.validated.params.id, req.user);
+  const payment = Array.isArray(order.payments) ? order.payments[0] : order.payments;
+
+  if (order.status !== "pending") {
+    throw new ApiError(409, "Only a pending order can be paid.");
+  }
+  if (!payment) throw new ApiError(404, "This order has no payment record.");
+  if (!ONLINE_METHODS.has(payment.method)) {
+    throw new ApiError(400, "Cash orders are paid on delivery or at the counter.");
+  }
+  if (payment.status === "paid") throw new ApiError(409, "This order is already paid.");
+  if (!paymongoConfigured()) throw new ApiError(503, "Online payment is not configured.");
+
+  /* Prices are locked, but stock may have sold out while the payment was failing. */
+  const lines = Array.isArray(order.order_items) ? order.order_items : [];
+  const productIds = [...new Set(lines.map((line) => line.product_id))];
+  const { data: products, error: productError } = await supabase()
+    .from("products")
+    .select("id, name, stock_qty, deleted_at")
+    .in("id", productIds);
+
+  if (productError) throw new ApiError(500, "Could not check the stock");
+
+  const byId = new Map((products ?? []).map((product) => [product.id, product]));
+
+  for (const line of lines) {
+    const product = byId.get(line.product_id);
+    if (!product || product.deleted_at) {
+      throw new ApiError(409, "An item in this order is no longer sold. Please cancel and order again.");
+    }
+    if (Number(line.quantity) > Number(product.stock_qty)) {
+      throw new ApiError(
+        409,
+        `Only ${product.stock_qty} of ${product.name} left. Cancel this order and place a new one.`,
+      );
+    }
+  }
+
+  const intent = await createPaymentIntent({
+    amount: order.total_amount,
+    method: payment.method,
+    description: `AgriMart order (${lines.length} item${lines.length === 1 ? "" : "s"})`,
+  });
+
+  const { data: updated, error } = await supabase()
+    .from("payments")
+    .update({ paymongo_ref: intent.id, status: "pending" })
+    .eq("order_id", order.id)
+    .in("status", ["pending", "failed"])
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw new ApiError(500, "Could not start the payment");
+  if (!updated) throw new ApiError(409, "That payment is already settled.");
+
+  res.json({
+    data: {
+      intent_id: intent.id,
+      client_key: intent.clientKey,
+      method: payment.method,
+      amount: order.total_amount,
+    },
+  });
 });
 
 ordersRouter.patch(
@@ -395,22 +464,45 @@ ordersRouter.patch(
     if (!order) throw new ApiError(404, "Order not found");
 
     const payment = Array.isArray(order.payments) ? order.payments[0] : order.payments;
-    assertTransition(order, next, payment?.method);
+    assertTransition(order, next, payment);
+
+    /* Stock follows the money: online orders at `paid`, COD when the counter confirms
+       (`pending → preparing`). `deduct_stock` is idempotent through stock_deducted. */
+    const shouldDeduct =
+      !order.stock_deducted &&
+      DEDUCTED_STATUSES.has(next) &&
+      (payment?.status === "paid" || (next === "preparing" && payment?.method === "cod"));
 
     let deducted = false;
-    if (next === "preparing" && payment?.method === "cod" && !order.stock_deducted) {
+    if (shouldDeduct) {
       const low = await deductStock(order.id);
       deducted = true;
       notifyLowStock(low).catch(() => 0);
     }
 
-    const { error: updateError } = await supabase()
+    const { data: changed, error: updateError } = await supabase()
       .from("orders")
       .update({ status: next })
       .eq("id", order.id)
-      .eq("status", order.status);
+      .eq("status", order.status)
+      .select("id")
+      .maybeSingle();
 
-    if (updateError) throw new ApiError(500, "Could not change the order status");
+    if (updateError || !changed) {
+      // The state moved underneath us (another staff tab or the webhook won). Undo the
+      // deduction so a refused transition cannot quietly remove stock.
+      if (deducted) {
+        try {
+          await restockOrder(order.id);
+          await broadcastStock(order.id);
+        } catch (undoError) {
+          console.error("[orders] could not undo the stock deduction:", undoError.message);
+        }
+      }
+      throw updateError
+        ? new ApiError(500, "Could not change the order status")
+        : new ApiError(409, "That order changed while you were updating it.");
+    }
 
     // COD is paid on completion; online payments are paid by the webhook.
     if (next === "completed" && payment?.method === "cod") {
@@ -418,6 +510,26 @@ ordersRouter.patch(
         .from("payments")
         .update({ status: "paid", paid_at: new Date().toISOString() })
         .eq("order_id", order.id);
+    }
+
+    if (next === "cancelled") {
+      if (payment?.status === "pending") {
+        await supabase()
+          .from("payments")
+          .update({ status: "failed" })
+          .eq("order_id", order.id)
+          .eq("status", "pending");
+      }
+
+      // A paid or packed order already took its stock; cancellation puts it back.
+      if (order.stock_deducted) {
+        try {
+          await restockOrder(order.id);
+          await broadcastStock(order.id);
+        } catch (restockError) {
+          console.error("[orders] restock after cancellation failed:", restockError.message);
+        }
+      }
     }
 
     if (deducted) await broadcastStock(order.id);

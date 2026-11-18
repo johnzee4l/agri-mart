@@ -4,6 +4,7 @@ import { ApiError } from "../lib/errors.js";
 import { supabase } from "../lib/supabase.js";
 import { auth, requireRole } from "../middleware.js";
 import { roundMoney } from "../lib/fee.js";
+import { withUserProfiles } from "../lib/profile.js";
 
 /* FR-18. The dashboard summary (staff and admin) and the four reports (admin).
    Sales and top-product totals are aggregated in SQL so a date range never loads
@@ -86,7 +87,7 @@ reportsRouter.get("/summary", requireRole("admin", "staff"), async (req, res) =>
     supabase().rpc("low_stock_products"),
     supabase()
       .from("orders")
-      .select("id, status, total_amount, fulfillment_type, created_at")
+      .select("id, user_id, status, total_amount, fulfillment_type, created_at")
       .order("created_at", { ascending: false })
       .limit(5),
     supabase()
@@ -97,7 +98,9 @@ reportsRouter.get("/summary", requireRole("admin", "staff"), async (req, res) =>
     supabase().from("orders").select("id", { count: "exact", head: true }),
   ]);
 
-  if (low.error || recent.error) throw new ApiError(500, "Could not load the dashboard");
+  if (low.error || recent.error || customers.error || orders.error) {
+    throw new ApiError(500, "Could not load the dashboard");
+  }
 
   // Staff run the shop day to day; money totals are admin only (C3).
   let sales = null;
@@ -118,12 +121,13 @@ reportsRouter.get("/summary", requireRole("admin", "staff"), async (req, res) =>
   }
 
   const lowStock = low.data ?? [];
+  const recentOrders = await withUserProfiles(recent.data);
 
   res.json({
     data: {
       sales,
       low_stock: lowStock,
-      recent_orders: recent.data ?? [],
+      recent_orders: recentOrders,
       counts: {
         customers: customers.count ?? 0,
         orders: orders.count ?? 0,

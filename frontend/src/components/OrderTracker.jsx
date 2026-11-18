@@ -28,7 +28,7 @@ export default function OrderTracker({ status, fulfillment }) {
               className={cn(
                 "flex size-5 items-center justify-center rounded-full transition-colors duration-[var(--duration-fast)]",
                 complete && "bg-primary text-on-primary",
-                active && "bg-primary-subtle text-primary-text ring-2 ring-primary",
+                active && "bg-tile-inverse text-on-inverse",
                 !complete && !active && "bg-muted text-fg-muted",
               )}
             >

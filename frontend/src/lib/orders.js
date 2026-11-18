@@ -2,7 +2,7 @@
    Pickup orders skip out_for_delivery. */
 
 export const ORDER_STATUSES = {
-  pending: { label: "Pending", tone: "bg-accent-subtle text-accent-text" },
+  pending: { label: "Pending", tone: "bg-highlight-subtle text-highlight-text" },
   paid: { label: "Paid", tone: "bg-primary-subtle text-primary-text" },
   preparing: { label: "Preparing", tone: "bg-muted text-fg" },
   out_for_delivery: { label: "Out for delivery", tone: "bg-primary-subtle text-primary-text" },
@@ -15,7 +15,7 @@ export const ORDER_FLOW = ["pending", "paid", "preparing", "out_for_delivery", "
 export const PICKUP_FLOW = ["pending", "paid", "preparing", "completed"];
 
 export const PAYMENT_METHODS = [
-  { value: "cod", label: "Cash on delivery", note: "Pay the rider or at the counter." },
+  { value: "cod", label: "Cash on pickup", note: "Pay at the counter when you collect." },
   { value: "gcash", label: "GCash", note: "Pay in the GCash app, then return here." },
   { value: "card", label: "Card", note: "Visa or Mastercard, processed by PayMongo." },
   { value: "grab_pay", label: "GrabPay", note: "Pay in the GrabPay app, then return here." },

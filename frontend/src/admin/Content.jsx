@@ -34,11 +34,6 @@ const STORE_FIELDS = [
   { name: "longitude", label: "Longitude", type: "number" },
 ];
 
-const RATE_FIELDS = [
-  { name: "base_fee", label: "Base fee", type: "number", hint: "Charged on every delivery." },
-  { name: "per_km", label: "Per kilometre", type: "number", hint: "Multiplied by the distance from the store pin." },
-];
-
 export default function Content() {
   const content = useApi("/content");
   const data = content.data?.data ?? null;
@@ -86,17 +81,9 @@ export default function Content() {
           <KeyEditor
             keyName="store_location"
             title="Store location"
-            note="The map pin on the Contact page, and the origin the delivery fee is measured from."
+            note="The map pin on the Contact page, and the pickup address customers see at checkout."
             initial={data.store_location}
             fields={STORE_FIELDS}
-          />
-
-          <KeyEditor
-            keyName="delivery_rates"
-            title="Delivery rates"
-            note="Checkout charges the base fee plus the per-kilometre rate times the distance from the store pin."
-            initial={data.delivery_rates}
-            fields={RATE_FIELDS}
           />
         </div>
       ) : null}
@@ -171,7 +158,7 @@ function KeyEditor({ keyName, title, note, initial, fields }) {
                   onChange={(event) =>
                     setValues((current) => ({ ...current, [field.name]: event.target.value }))
                   }
-                  className="rounded-md bg-surface p-3.5 text-base text-fg ring-1 ring-inset ring-field-edge"
+                  className="rounded-md bg-muted p-3.5 text-base text-fg"
                 />
               </label>
             ) : (

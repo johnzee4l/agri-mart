@@ -25,9 +25,11 @@ and tick the Phase 5 boxes once the PR is merged.
    psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/001_schema.sql
    psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/002_functions.sql
    psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/003_seed.sql
+   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/004_phase5_fixes.sql
    ```
    `003_seed.sql` also inserts a sample product, so the storefront is not empty on a fresh
-   project.
+   project. `004_phase5_fixes.sql` adds product sale prices and one-time announcement
+   notification bookkeeping; run it last.
 3. Storage: create the **`public-images`** bucket and mark it public. Admin uploads write
    there and the storefront reads the returned public URL.
 4. Authentication → URL Configuration: set the Site URL to the deployed frontend origin and
@@ -82,7 +84,8 @@ as `frontend/.env.example` says — and deploy the static output:
 | --- | --- |
 | `VITE_API_URL` | `https://agrimart-api.onrender.com/api` |
 | `VITE_PAYMONGO_PUBLIC_KEY` | PayMongo public key (`pk_test_…`), the browser half of checkout |
-| `VITE_GOOGLE_MAPS_KEY` | Google Maps JS key, for the store map and the address picker |
+
+There is no map variable: the store map and address picker use Leaflet with OpenStreetMap tiles and need no key.
 
 The Socket.IO client connects to the origin of `VITE_API_URL`, so chat and live stock
 follow the same value. Then set `FRONTEND_URL` on the API service to the frontend's exact

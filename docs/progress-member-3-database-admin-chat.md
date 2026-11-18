@@ -8,6 +8,8 @@
 | Gates you sign | 1, 2, 3, 4, 5 |
 | Overview | `progress-00-overview.md` |
 
+> **Working-tree status (15 Nov 2026):** Phases 1 to 5 are implemented, including live chat with push fallback, the four reports with CSV and print, and the PWA shell. The checkboxes below still record merge and gate sign-off, so they stay open until the work lands on `main` and the deployed QA checklist passes. `README.md` has the feature summary.
+
 **You unblock the team.** Phase 1 schema and RLS are the first thing Members 1 and 2 depend on. Post in the team channel as soon as migrations are live.
 
 ---
@@ -61,7 +63,7 @@ Progress % = Done ÷ Tasks × 100. Update Done and Status after each merge.
 ## 5. Phase 2: Admin Shell and Catalog Management (Gate 2)
 
 - [ ] `[BP]` `AdminLayout.jsx` with role-aware navigation (admin and staff) and route guards.
-- [ ] `[BP]` `Dashboard.jsx`: low-stock list and recent orders. The sales summary card is added in Phase 4 (C3).
+- [ ] `[BP]` `Dashboard.jsx`: low-stock list and recent orders, plus the admin sales summary for the last 30 days from `GET /reports/summary` (C3).
 - [ ] `[BP]` `admin/Products.jsx`: create, edit, image upload, Active and Archived tabs, archive, restore, and purge (FR-3, FR-23). Blocked by D4.
 - [ ] `[BP]` Category management on the same page.
 - [ ] `[DT]` Admin uses `data-density="compact"` on the layout root. Tables have no borders and use zebra rows. KPIs are typographic on canvas (designtokens 7.4, 8.4, 12).

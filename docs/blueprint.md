@@ -11,7 +11,7 @@
 | Database | PostgreSQL via **Supabase** (database, auth, file storage). |
 | Frontend / Backend | **React** (Vite) / **Node.js** (Express) API. |
 | Added features | PWA with limited offline mode, Web Push notifications, real-time chat (WebSocket), full CRUD through the Node API with soft delete / archiving. |
-| Unchanged | Every business rule, functional requirement, non-functional requirement, role, and integration (PayMongo, SMTP/Gmail, Google Maps). |
+| Unchanged | Every business rule, functional requirement, non-functional requirement, role, and integration (PayMongo, SMTP/Gmail, maps through Leaflet + OpenStreetMap). |
 
 ---
 
@@ -86,7 +86,7 @@ IDs FR-1 to FR-19 come from the original document and are **unchanged** (only th
 | FR-17 | Admin edits website content (home text, banners, About, Contact) without code changes | `site_content` table, `admin/Content.jsx` (replaces the CMS) |
 | FR-18 | Sales, inventory, low-stock, top-selling reports by date range, export CSV or PDF | `routes/reports.js`, `admin/Reports.jsx` |
 | **Integrations** | | |
-| FR-19 | Contact page shows store on Google Maps; checkout lets customers pin delivery location | `components/MapPicker.jsx`, `pages/Contact.jsx` |
+| FR-19 | Contact page shows the store on an OpenStreetMap map through Leaflet; checkout lets customers pin delivery location. No map API key | `components/MapPicker.jsx`, `components/StoreMap.jsx`, `pages/Contact.jsx`, `lib/maps.js` |
 | **New features** | | |
 | FR-20 | **PWA:** installable; key parts keep working offline with limitations (see 6.1) | `sw.js`, `vite.config.js` |
 | FR-21 | **Push notifications** (Web Push) | `routes/push.js`, `lib/push.js`, `sw.js` |
@@ -122,7 +122,7 @@ IDs FR-1 to FR-19 come from the original document and are **unchanged** (only th
 | Administrator | All Staff use cases + Manage Products, Manage Site Content, Post Announcements, Manage Users and Roles, Monitor Inventory, Generate Reports |
 | PayMongo (external) | Confirm or reject payment via webhook |
 | Email server (external) | Deliver notifications |
-| Google Maps (external) | Map tiles and coordinates |
+| OpenStreetMap (external) | Map tiles, rendered with Leaflet. No API key |
 | Push service (external) | Deliver Web Push messages |
 
 ---
@@ -141,12 +141,12 @@ IDs FR-1 to FR-19 come from the original document and are **unchanged** (only th
  │  reports · chat · push                                │
  └──────┬──────────────┬───────────────┬─────────────────┘
         ▼              ▼               ▼
- [ Supabase ]      [ PayMongo ]    [ SMTP / Gmail ]      Google Maps (called from the browser)
+ [ Supabase ]      [ PayMongo ]    [ SMTP / Gmail ]   [ OpenStreetMap tiles ]
  Postgres, Auth,   intent + webhook
  Storage
 ```
 
-Three tiers: presentation (React), application (Node API), data (Supabase Postgres). External services are reached only through the Node API, except Google Maps and the PayMongo public-key step, which run in the browser.
+Three tiers: presentation (React), application (Node API), data (Supabase Postgres). External services are reached only through the Node API, except OpenStreetMap tiles (rendered by Leaflet in the browser) and the PayMongo public-key step, which run in the browser.
 
 ### 3.2 Key design decisions (chosen for speed and simplicity)
 
@@ -164,10 +164,10 @@ Three tiers: presentation (React), application (Node API), data (Supabase Postgr
 
 | Layer | Technology |
 | --- | --- |
-| Frontend | React 18+, Vite, React Router, Tailwind CSS, `vite-plugin-pwa` (injectManifest), `socket.io-client`, `@react-google-maps/api` |
+| Frontend | React 18+, Vite, React Router, Tailwind CSS, `vite-plugin-pwa` (injectManifest), `socket.io-client`, `leaflet` (OpenStreetMap) |
 | Backend | Node.js 20+ (ESM), Express 5, `@supabase/supabase-js`, `socket.io`, `zod`, `helmet`, `cors`, `express-rate-limit`, `multer`, `nodemailer`, `web-push` |
 | Database | Supabase (PostgreSQL, Auth, Storage) |
-| Integrations | PayMongo sandbox (plain `fetch`, no SDK), Gmail SMTP, Google Maps JS API |
+| Integrations | PayMongo sandbox (plain `fetch`, no SDK), Gmail SMTP, Leaflet + OpenStreetMap tiles |
 | Hosting | Render (backend web service + frontend static site, HTTPS included), Supabase cloud |
 
 Notes: use `node --env-file=.env --watch` instead of dotenv and nodemon. Generate CSV by hand. No test framework: use the manual QA checklist in section 9.
@@ -312,7 +312,7 @@ Setup: `vite-plugin-pwa` with `injectManifest` so one `sw.js` handles caching **
 | Read announcements, contact info, store map image/address | Admin actions and all other writes |
 | View order history last loaded | Fresh stock and price (shown as "last updated" while offline) |
 
-Caching rules in `sw.js`: precache the app shell; **stale-while-revalidate** for `GET /products`, `/categories`, `/announcements`, `/content`; **network-first** for `GET /orders` and `/me`; **never cache** anything else (auth, payments, chat). An `OfflineBanner` appears when `navigator.onLine` is false, and Checkout and Chat disable their actions with a clear message.
+Caching rules in `sw.js`: precache the app shell; **stale-while-revalidate** for `GET /products`, `/categories`, `/announcements`, `/content` and `/store-location`; **network-first** for `GET /orders` and `/me`; **never cache** auth, payments, chat, push or health. OpenStreetMap tiles and product photos use a bounded cache-first media store, so a recently viewed map still opens. An `OfflineBanner` appears when `navigator.onLine` is false, and Checkout and Chat disable their actions with a clear message.
 
 ### 6.2 Push notifications (FR-21)
 
@@ -419,7 +419,7 @@ Error format: `{ "error": "message", "details": [...] }` with correct HTTP statu
 | `/login` `/signup` `/forgot` `/reset` | Auth | Forms with validation messages, Forgot Password link |
 | `/account` | My Account | Profile, addresses, order history with status tracker, notification toggle |
 | `/announcements` | Announcements | Card list |
-| `/contact` | Contact / Store Locator | Google Map, address, hours |
+| `/contact` | Contact / Store Locator | Leaflet/OpenStreetMap map, address, hours |
 | `/admin/*` | Admin | Dashboard, Products, Orders, Inventory, Announcements, Content, Users, Reports, Chat |
 
 ---
@@ -449,7 +449,7 @@ Error format: `{ "error": "message", "details": [...] }` with correct HTTP statu
 | File | Variables |
 | --- | --- |
 | `backend/.env` | `PORT`, `FRONTEND_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET`, `SMTP_USER`, `SMTP_PASS` (Gmail app password), `ADMIN_EMAIL`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
-| `frontend/.env` | `VITE_API_URL`, `VITE_PAYMONGO_PUBLIC_KEY`, `VITE_GOOGLE_MAPS_KEY` |
+| `frontend/.env` | `VITE_API_URL`, `VITE_PAYMONGO_PUBLIC_KEY`. Maps need no key |
 
 ---
 
@@ -491,7 +491,7 @@ The five phases are aligned across members, and each ends with a **sync gate** (
 **Phase 4: Account, Contact, Live stock**
 - [ ] `Account.jsx`: profile edit, saved addresses (add, edit, archive) (FR-15)
 - [ ] Order history with status tracker and cancel-while-pending (FR-8)
-- [ ] `Contact.jsx`: Google Map with store pin, address, hours (FR-19)
+- [ ] `Contact.jsx`: Leaflet/OpenStreetMap map with store pin, address, hours (FR-19)
 - [ ] `lib/socket.js`: connect with token, listen to `stock`, update product pages live
 - [ ] Mount `ChatBox` (from Member 3) in the layout for logged-in customers
 
@@ -613,7 +613,7 @@ The five phases are aligned across members, and each ends with a **sync gate** (
 | Public website with home, registration, login, profile | FR-13 to FR-15, section 7.1 |
 | At least 3 major modules | 4 modules: Catalog, Ordering and Payment, Inventory, Announcements |
 | Admin panel (previously CMS-based) | Custom admin panel, section 6.7 and `frontend/src/admin` |
-| System integration | PayMongo, SMTP/Gmail, Google Maps (plus Web Push) |
+| System integration | PayMongo, SMTP/Gmail, Leaflet + OpenStreetMap (plus Web Push) |
 | Database with 5+ tables and ER diagram | 13 tables, section 5 |
 | Security requirements | Section 2.2 and 6.5 |
 | At least 2 user roles | Administrator, Staff, Customer |

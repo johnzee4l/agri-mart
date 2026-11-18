@@ -21,9 +21,9 @@ export default function Stepper({ steps, current, onSelect }) {
             >
               <span
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-full text-caption font-semibold transition-colors duration-[var(--duration-fast)]",
+                  "flex size-6 items-center justify-center rounded-full text-caption font-semibold transition-colors duration-[var(--duration-fast)]",
                   done && "bg-primary text-on-primary",
-                  active && "bg-primary-subtle text-primary-text ring-2 ring-primary",
+                  active && "bg-tile-inverse text-on-inverse",
                   !done && !active && "bg-muted text-fg-muted",
                 )}
               >

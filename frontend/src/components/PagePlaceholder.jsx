@@ -3,7 +3,7 @@ export default function PagePlaceholder({ eyebrow, title, note }) {
   return (
     <section className="mx-auto w-full max-w-[var(--container-content)] px-4 py-16 lg:px-10 lg:py-32">
       {eyebrow ? (
-        <p className="mb-3 text-eyebrow font-bold text-primary-text uppercase">{eyebrow}</p>
+        <p className="mb-3 inline-flex h-7 items-center rounded-full bg-primary-subtle px-3 text-caption font-semibold text-primary-text">{eyebrow}</p>
       ) : null}
       <h1 className="text-display-lg text-fg">{title}</h1>
       <p className="mt-4 max-w-[65ch] text-body-md text-fg-muted">{note}</p>

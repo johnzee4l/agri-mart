@@ -90,6 +90,28 @@ export async function notifyAnnouncementPublished(announcement) {
   });
 }
 
+/** FR-22. A chat message pushed only when the recipient has no live socket. */
+export async function notifyChatMessage({ recipient, conversation, message }) {
+  const body = sentences(message?.body) || "You have a new chat message.";
+  const preview = message?.body ? sentences(message.body, 90) : "Open AgriMart to read it.";
+
+  if (recipient === "staff") {
+    return sendPushToRoles(["admin", "staff"], {
+      title: "New message from a customer",
+      body: preview,
+      url: "/admin/chat",
+      tag: `chat-${conversation.id}`,
+    });
+  }
+
+  return sendPushToUser(conversation.customer_id, {
+    title: "New message from AgriMart",
+    body,
+    url: "/?chat=1",
+    tag: `chat-${conversation.id}`,
+  });
+}
+
 /** Low stock → admins only; the same event also emails them (FR-10). */
 export async function notifyLowStockPush(products) {
   const names = products

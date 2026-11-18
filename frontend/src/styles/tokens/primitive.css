@@ -1,17 +1,17 @@
-/* Primitive scales (designtokens.md 5.1).
-   Primitives never become Tailwind utilities: only semantic.css may reference them. */
+/* Primitive scales (designtokens.md 5.1). Primitives never become Tailwind utilities:
+   only semantic.css may reference them, so bg-soil-100 does not exist. */
 :root {
-  --ink-50: #f5f7f7;
-  --ink-100: #e9eeee;
-  --ink-200: #d3dbdc;
-  --ink-300: #aebbbd;
-  --ink-400: #8a9a9c;
-  --ink-500: #66777a;
-  --ink-600: #4d5d61;
-  --ink-700: #3a474a;
-  --ink-800: #263134;
-  --ink-900: #172023;
-  --ink-950: #0c1214;
+  --soil-50: #faf8f3;
+  --soil-100: #f3efe6;
+  --soil-200: #e7e1d3;
+  --soil-300: #d3cbb8;
+  --soil-400: #afa690;
+  --soil-500: #776f5d;
+  --soil-600: #625c4d;
+  --soil-700: #4a453a;
+  --soil-800: #332f27;
+  --soil-900: #211e19;
+  --soil-950: #12100d;
 
   --green-50: #f1f7f2;
   --green-100: #ddeee1;
@@ -48,4 +48,20 @@
   --rust-800: #6e2416;
   --rust-900: #4f190f;
   --rust-950: #2e0e08;
+
+  /* Sprout ships 100 to 500 and Bloom 100 to 700 plus 900 (2.1). */
+  --sprout-100: #eaf9e1;
+  --sprout-200: #d2f4bf;
+  --sprout-300: #b5ec96;
+  --sprout-400: #8fdd66;
+  --sprout-500: #6cc93f;
+
+  --bloom-100: #eeebfb;
+  --bloom-200: #ddd7f7;
+  --bloom-300: #c2b8f0;
+  --bloom-400: #a294e6;
+  --bloom-500: #8473d6;
+  --bloom-600: #6654bd;
+  --bloom-700: #51429a;
+  --bloom-900: #28214f;
 }

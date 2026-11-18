@@ -9,7 +9,7 @@ const FALLBACK_HERO = {
   eyebrow: "Agricultural supply store",
   headline: "Everything the farm needs, priced and in stock.",
   subheadline:
-    "Seeds, fertilizers, feeds, tools and irrigation supplies for farmers, backyard growers and livestock raisers. Order online for delivery or store pickup.",
+    "Seeds, fertilizers, feeds, tools and irrigation supplies for farmers, backyard growers and livestock raisers. Order online and collect from the store.",
   cta_label: "Browse products",
   cta_href: "/products",
 };
@@ -32,7 +32,6 @@ export function useContent() {
       cta_href: hero.cta_href ?? FALLBACK_HERO.cta_href,
     },
     banners: Array.isArray(content.home_banners) ? content.home_banners : [],
-    rates: content.delivery_rates ?? null,
     store: store
       ? {
           address: store.address ?? null,

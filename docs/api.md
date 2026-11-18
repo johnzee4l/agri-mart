@@ -2,10 +2,10 @@
 
 | Field | Value |
 | --- | --- |
-| Version | 0.5 (Phase 4 complete) |
+| Version | 0.6 (Phase 5 complete) |
 | Owner | Member 2 (`backend/src`) |
 | Source | `blueprint.md` sections 6 and 7, plus `designtokens.md` for UI-facing shapes |
-| Status | Phases 1 and 2 (health, auth, me, catalog, announcements, content, uploads) are implemented. Later phases still answer `501 { "error": "Not implemented yet" }` and replace their stubs in turn. |
+| Status | All planned phases are implemented: auth, catalog, orders, payments, inventory, users, reports, chat, push, PWA and offline reads. |
 
 **Rule:** anyone changing an endpoint updates this file in the same PR.
 
@@ -44,8 +44,9 @@
 | `POST /uploads` | A | Image upload to `public-images`, returns the URL | 2 |
 | `POST /orders` | C | Create order with server-side prices, stock check, delivery fee, payment intent for online methods | 3 |
 | `GET /orders` · `GET /orders/:id` | C, S | Customers see their own; staff and admin see all with `?status&from&to` | 3 |
-| `POST /orders/:id/cancel` | C | Only while `pending` | 3 |
-| `PATCH /orders/:id/status` | S | Change status; sends email and push; deducts stock for COD at `preparing` | 3 |
+| `POST /orders/:id/cancel` | C | Only while `pending`; restocks once if a retried payment had deducted stock | 3 |
+| `POST /orders/:id/pay` | C, S | Fresh PayMongo intent for a pending online order, without duplicating it | 3 |
+| `PATCH /orders/:id/status` | S | Change status; sends email and push; `paid` is a payment fact | 3 |
 | `POST /payments/webhook` | PayMongo | Raw body, signature verified, idempotent, then `deduct_stock` | 3 |
 | `GET /inventory/logs` · `GET /inventory/low-stock` | S | Inventory log and low-stock list | 3 or 4 (C5) |
 | `POST /inventory/adjust` | S | Stock-in, adjustment, spoilage | 3 or 4 (C5) |
@@ -54,6 +55,7 @@
 | `GET /reports/:type` | A | `sales`, `inventory`, `low-stock`, `top-products`; `?from&to&format=csv` | 4 |
 | `GET /chat/conversations` | S | Staff inbox | 4 |
 | `GET /chat/messages` | C, S | Thread history; customers read only their own conversation | 4 |
+| `POST /chat/messages` | C, S | REST fallback for sending when the socket is unavailable | 4 |
 | `GET /push/public-key` | C, S | VAPID public key | 4 or 5 (C1) |
 | `POST /push/subscribe` · `POST /push/unsubscribe` | C, S | Push subscription management | 4 or 5 (C1) |
 
@@ -122,11 +124,11 @@ Rules: the first saved address becomes the default; setting `is_default: true` c
 
 **Orders.** Every route needs the Bearer token; staff and admin see all orders, customers only their own.
 
-`POST /orders` body: `{ items: [{ product_id, qty }], fulfillment_type: "delivery" | "pickup", address_id?, method: "cod" | "gcash" | "card" | "grab_pay" }`.
+`POST /orders` body: `{ items: [{ product_id, qty }], fulfillment_type: "delivery" | "pickup", address_id?, latitude?, longitude?, method: "cod" | "gcash" | "card" | "grab_pay" }`.
 
 Prices, stock and the delivery fee are decided on the server; nothing money-related is read from the body. Repeats of one product are merged before the stock check, and a short line answers `400` with `details[].path` such as `items.0.qty`. Archived products are refused the same way. Delivery needs an address the caller owns (`404` when it is not theirs) and pickup stores `address_id: null` with a fee of `0`.
 
-Delivery fee: `base_fee + per_km × haversine(store_location, address pin)`, both read from `site_content`, rounded to the centavo. An address without a pin pays `base_fee`; a missing `delivery_rates` or store pin with a pinned address answers `503`.
+Delivery fee: `base_fee + per_km × haversine(store_location, destination pin)`, both read from `site_content`, rounded to the centavo. The optional `latitude`/`longitude` override the saved address pin for this delivery only; `address_id` is still required. Without an override the address pin is used; an address without a pin pays `base_fee`; a missing `delivery_rates` or store pin with a pinned address answers `503`.
 
 Online methods create the PayMongo intent **before** the order row is written, so a provider failure cannot leave an orphan order: `503` when the secret key is not configured, `502` when PayMongo refuses. The intent is created for the full total in centavos with `capture_type: automatic`; the browser attaches the payment method with the returned `client_key`.
 
@@ -134,17 +136,19 @@ Online methods create the PayMongo intent **before** the order row is written, s
 
 `GET /orders` → `200 { data, page, total }`, newest first, accepting `?status&from&to&page&limit`; `limit` defaults to 20 and caps at 60. `GET /orders/:id` → `200 { data }` with `order_items` (plus each product's `name`, `unit`, `image_url`) and `payments`. Another account's order answers `404`, never `403`.
 
-`POST /orders/:id/cancel` → `200 { data }` while the order is `pending` (otherwise `409`), and its pending payment row becomes `failed`.
+`POST /orders/:id/cancel` → `200 { data }` while the order is `pending` (otherwise `409`), its pending payment row becomes `failed`, and any stock a retried payment had already deducted is returned once.
 
-`PATCH /orders/:id/status` (staff, admin) body `{ status }`. Allowed moves: `pending → paid | cancelled`, `paid → preparing | cancelled`, `preparing → out_for_delivery | completed | cancelled`, `out_for_delivery → completed`. COD may skip the paid step with `pending → preparing`; online orders may not. Pickup orders skip `out_for_delivery` (`400`). Any other move is `409`. Reaching `preparing` calls `deduct_stock` once for COD, and COD is marked `paid` with `paid_at` at `completed`. Every change emails the customer, and a deduction broadcasts `stock`.
+`POST /orders/:id/pay` (customer or staff) → `200 { data: { intent_id, client_key, method, amount } }` for a `pending` order whose method is online and whose payment is not already `paid`. It rechecks stock without changing items or prices, then replaces `paymongo_ref` with a fresh intent. A sold-out or archived line answers `409`; COD answers `400`; a settled payment answers `409`; an unconfigured provider answers `503`.
+
+`PATCH /orders/:id/status` (staff, admin) body `{ status }`. Allowed moves: `pending → paid | cancelled`, `paid → preparing | cancelled`, `preparing → out_for_delivery | completed | cancelled`, `out_for_delivery → completed`. COD may skip the paid step with `pending → preparing`; online orders may not. Pickup orders skip `out_for_delivery` (`400`). Any other move is `409`. `paid` is a payment fact: a manual move is refused unless the payment row is already `paid`. Stock follows the money: COD deducts once at `preparing`, online orders deduct when payment settles, and cancelling after either point returns the stock once. COD is marked `paid` with `paid_at` at `completed`. Every change emails the customer, and a deduction broadcasts `stock`.
 
 **PayMongo webhook.** `POST /payments/webhook`, no token. The signature is HMAC-SHA256 over `"<t>.<raw body>"` with `PAYMONGO_WEBHOOK_SECRET`, compared in constant time against `te` (test) or `li` (live) from `Paymongo-Signature`. A missing secret answers `503`; a bad signature, a wrong timestamp or a body changed after signing answers `401`.
 
-Only `payment` resources act. `payment_intent_id` finds the `payments` row through `paymongo_ref`: success marks the payment `paid`, moves a `pending` order to `paid` and calls `deduct_stock` once; a failure marks the payment `failed` and leaves the order `pending` for another attempt. Repeated deliveries of a paid payment and unrelated events are acknowledged with `200` so PayMongo stops retrying; unknown intents are ignored the same way.
+Only `payment` resources act. `payment_intent_id` finds the `payments` row through `paymongo_ref`: success marks the payment `paid`, moves a `pending` order to `paid` and calls `deduct_stock` once. A paid event for a cancelled order records the payment but never deducts stock; the store refunds it. If the stock deduction fails, the order returns to `pending` so a later PayMongo retry can settle it. A failure marks the payment `failed` and leaves the order `pending` for `POST /orders/:id/pay`. Repeated deliveries and unrelated events are acknowledged with `200`; a repeat of a settled payment also carries `duplicate: true`, and unknown intents are ignored the same way.
 
 Local testing needs a public HTTPS URL. Run `ngrok http 4000` (any tunnel works) and register `https://<tunnel>/api/payments/webhook` for `payment.paid` and `payment.failed` in the PayMongo dashboard, then copy its signing secret into `PAYMONGO_WEBHOOK_SECRET`.
 
-**Order statuses.** `pending → paid → preparing → out_for_delivery → completed`, plus `cancelled`; pickup skips `out_for_delivery`.
+**Order statuses.** `pending → paid → preparing → out_for_delivery → completed`, plus `cancelled`; pickup skips `out_for_delivery`, and COD normally goes `pending → preparing` because cash is collected later.
 
 **Email.** Order confirmation and every status change go to the account email over Gmail SMTP (`SMTP_USER`, `SMTP_PASS`). Mail is best effort: an unconfigured or failing mailbox never fails an order request.
 
@@ -172,6 +176,26 @@ Local testing needs a public HTTPS URL. Run `ngrok http 4000` (any tunnel works)
 
 `GET /reports/:type` is admin only. `type` ∈ `sales`, `inventory`, `low-stock`, `top-products`, anything else `404`. Query `?from&to&format=json|csv`: a bare date includes that whole day, the default range is the last 30 days, and `from` on or after `to` is `400`. `format=csv` returns `text/csv` as an attachment named after the report. Sales and top products aggregate in SQL (`report_sales`, `report_top_products`) over paid, preparing, out-for-delivery and completed orders; the inventory report values stock at the current price and flags low rows; the low-stock report adds each shortfall.
 
+**Chat.** One conversation per customer. A signed-in customer never names a conversation: the API resolves their own row, creating it on the first message. Staff and admin name the thread explicitly.
+
+`GET /chat/conversations` (staff, admin) → `200 { data, page, total }`, newest activity first, at most 50 rows. Each row is `{ id, customer_id, last_message_at, created_at, customer: { full_name, phone } | null, last_message: { id, body, sender_id, created_at } | null }`.
+
+`GET /chat/messages` → `200 { data, page, total, conversation }`. Customers may omit `conversation_id` and always read their own conversation; naming another one is `404`. Staff and admin must pass `?conversation_id`. Optional `?before` is an ISO timestamp for paging, and `?limit` defaults to 50 and caps at 100. Messages come back oldest first, ≤ 2000 characters each.
+
+`POST /chat/messages` body `{ body, conversation_id? }` → `201 { data: message, conversation_id, customer_id }`. `body` is trimmed, must be 1–2000 characters, and is stored before any live event. Customers do not need to pass `conversation_id`; staff and admin do. The matching Socket.IO `message:send` uses the same validation and save path.
+
+## Realtime chat events (FR-22)
+
+| Event | Direction | Payload |
+| --- | --- | --- |
+| handshake | client → server | `auth: { token }` |
+| `chat:ready` | server → client | `{ connected, rooms, role }` |
+| `message:send` | client → server | `{ body }` (customer) or `{ conversation_id, body }` (staff), with an ack `{ ok, data | error }` |
+| `message:new` | server → client | `{ message, conversation_id, customer_id }` to `conv:<customerId>` and the `staff` room |
+| `stock` | server → client | `{ product_id, stock_qty }` after any deduction or adjustment |
+
+The handshake verifies the Supabase token and `profiles.is_active`, just like the REST middleware. Customers join `conv:<customerId>`; staff and admin join `staff`. Sends are burst-limited per socket (20 messages per 10 seconds). A push notification is sent only when the recipient room has no live socket.
+
 **Push.** `GET /push/public-key` (any signed-in account) → `{ key }`, with `null` when VAPID is not configured.
 
 `POST /push/subscribe` body `{ endpoint, keys: { p256dh, auth } }` → `201 { data: { id } }`. The endpoint is unique, so re-subscribing the same browser updates that row and moves it to the current account. `503` when VAPID is unset, `400` for a malformed subscription.
@@ -189,6 +213,7 @@ Blueprint 6.2 as implemented. Each event is fired by the route that caused it, i
 | Order paid | `POST /payments/webhook` | Active staff and admins |
 | New announcement published | `POST /announcements`, `PATCH /announcements/:id` | Active customers |
 | Low stock | Any deduction or adjustment that reaches `reorder_level`, with the low-stock email | Active admins |
+| New chat message | `message:send` or `POST /chat/messages`, only when the recipient room has no live socket | The customer, or every signed-in staff member |
 
 The payload is `{ title, body, url, tag }`, which is what `frontend/src/sw.js` reads. `url` is a frontend route the service worker opens on click (`/orders/:id`, `/admin/orders`, `/admin/inventory`, `/announcements`) and `tag` collapses repeats about the same subject in the tray.
 
@@ -208,23 +233,18 @@ Reviewed against the blueprint checklist (validation, no raw SQL, no secrets in 
 
 **Origin.** CORS answers only the origins listed in `FRONTEND_URL` (comma-separated). Any other origin is `403 { error: "Origin not allowed" }` with no `Access-Control-Allow-Origin`, so a foreign page cannot read an API answer even with a stolen token. `helmet` sets the standard headers and `x-powered-by` is off.
 
-**Access.** Authentication is a Supabase access token in the `Authorization` header, verified per request and re-checked against `profiles.is_active`, so a deactivation applies to that account's next request. Every protected route answers `401` without a token and `403` for the wrong role: staff cannot reach users, reports, uploads, catalog writes or content writes. Reads and writes are scoped by `req.user.id`, never by an id taken from the body, so another customer's order, address or conversation is a `404`. The two `chat` stubs are the exception until Member 3 lands them: they hold no data and answer `501` to any caller.
+**Access.** Authentication is a Supabase access token in the `Authorization` header, verified per request and re-checked against `profiles.is_active`, so a deactivation applies to that account's next request. Every protected route answers `401` without a token and `403` for the wrong role: staff cannot reach users, reports, uploads, catalog writes or content writes. Reads and writes are scoped by `req.user.id`, never by an id taken from the body, so another customer's order, address or conversation is a `404`.
 
 **Data and secrets.** Every database call goes through supabase-js builders or `rpc()` functions with named parameters; no SQL string is assembled in Node, and user input never reaches a filter expression unescaped (`q` is length-capped and stripped of PostgREST separators and LIKE wildcards). The only environment value a client ever sees is `VAPID_PUBLIC_KEY`; the service-role key, the PayMongo secret and webhook secret, the SMTP credentials and the VAPID private key stay in the server process. Only `.env.example` is tracked, with empty values, and `.gitignore` keeps real `.env` files out.
 
 **Known gap.** Push and webhook delivery cannot be exercised locally (see section 10), and `POST /payments/webhook` deliberately skips zod: its signature is verified over the raw bytes before its shape is read, and an unrecognised shape is acknowledged and ignored.
 
-## Realtime (`backend/src/chat.js`)
-
-Socket.IO on the same port, same origin allowlist.
-
-| Event | Direction | Payload |
-| --- | --- | --- |
-| handshake | client → server | `auth: { token }` |
-| `message:send` | client → server | `{ body }` (customer) or `{ conversation_id, body }` (staff) |
-| `message:new` | server → client | `{ message }` to `conv:<customerId>` and the `staff` room |
-| `stock` | server → client | `{ product_id, stock_qty }` after any deduction or adjustment |
-
 ## Frontend routes (blueprint 7.1)
 
 `/` · `/products` · `/products/:id` · `/cart` · `/checkout` · `/login` `/signup` `/forgot` `/reset` · `/account` · `/announcements` · `/contact` · `/admin/*` (Dashboard, Products, Orders, Inventory, Announcements, Content, Users, Reports, Chat).
+
+## PWA and maps
+
+`frontend/src/sw.js` precaches the app shell, serves catalog/content reads stale-while-revalidate, serves orders and `/me` network-first, and never caches auth, payment, chat, push or health responses. OpenStreetMap tiles and product photos use a bounded cache-first media store, so a viewed map still opens offline. Chat and checkout are disabled while offline; catalog pages keep their last response.
+
+Maps use Leaflet 1.9 with OpenStreetMap raster tiles (`frontend/src/lib/maps.js`). There is no Google Maps dependency and no map API key: set nothing beyond `VITE_API_URL` and the optional PayMongo public key. The store map and the delivery pin picker credit OpenStreetMap in the attribution control.

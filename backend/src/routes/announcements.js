@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { crudRouter, patchOf } from "../lib/crud.js";
 import { notifyAnnouncementPublished } from "../lib/pushEvents.js";
+import { supabase } from "../lib/supabase.js";
 
 /* FR-12, FR-13, FR-21. Draft and publish through published_at: null is a draft, a past
    timestamp is published. Public reads see published rows only, pinned first;
@@ -27,6 +28,54 @@ const announcementBody = z.object({
 /** Live means the timestamp exists and is not in the future. */
 function isPublished(row) {
   return row?.published_at != null && Date.parse(row.published_at) <= Date.now();
+}
+
+/* Pushes one notice and stamps notified_at so a scheduled sweep cannot send it a
+   second time. A failed push leaves the stamp empty so the next sweep retries. */
+async function announceOnce(row) {
+  try {
+    await notifyAnnouncementPublished(row);
+  } catch (error) {
+    console.error("[announcements] push failed:", error?.message ?? error);
+    return false;
+  }
+
+  const { error } = await supabase()
+    .from("announcements")
+    .update({ notified_at: new Date().toISOString() })
+    .eq("id", row.id)
+    .is("notified_at", null);
+
+  if (error) {
+    console.error("[announcements] could not record the push:", error.message);
+    return false;
+  }
+
+  return true;
+}
+
+/* A scheduled notice turns live while the API is running, without an admin save.
+   Called at boot and once a minute from index.js; each row is pushed at most once. */
+export async function sweepScheduledAnnouncements() {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase()
+    .from("announcements")
+    .select("id, title, body, published_at, notified_at")
+    .not("published_at", "is", null)
+    .lte("published_at", now)
+    .is("notified_at", null)
+    .is("deleted_at", null)
+    .order("published_at", { ascending: true })
+    .limit(25);
+
+  if (error) {
+    console.error("[announcements] could not check scheduled notices:", error.message);
+    return 0;
+  }
+
+  const rows = data ?? [];
+  for (const row of rows) await announceOnce(row);
+  return rows.length;
 }
 
 export const announcementsRouter = Router();
@@ -57,11 +106,11 @@ announcementsRouter.use(
     // Push only when an announcement actually becomes live: a draft is silent, and
     // editing one that is already published does not notify anyone twice.
     afterCreate: (row) => {
-      if (isPublished(row)) return notifyAnnouncementPublished(row);
+      if (isPublished(row)) return announceOnce(row);
       return null;
     },
     afterUpdate: (row, previous) => {
-      if (isPublished(row) && !isPublished(previous)) return notifyAnnouncementPublished(row);
+      if (isPublished(row) && !isPublished(previous)) return announceOnce(row);
       return null;
     },
   }),

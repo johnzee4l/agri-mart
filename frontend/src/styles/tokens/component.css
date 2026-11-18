@@ -10,6 +10,10 @@
   --container-content: 1200px;
   --container-wide: 1440px;
 
+  /* Bottom navigation clears the fixed mobile bar plus the platform inset. */
+  --mobile-nav-height: 64px;
+  --mobile-nav-clearance: calc(var(--mobile-nav-height) + 24px);
+
   --z-sticky: 20;
   --z-header: 30;
   --z-overlay: 40;

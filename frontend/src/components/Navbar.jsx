@@ -1,36 +1,64 @@
-import { useEffect, useState } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
-import { m } from "motion/react";
-import { List, X } from "@phosphor-icons/react";
+import { useEffect, useRef, useState } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { AnimatePresence, MotionConfig, m } from "motion/react";
+import {
+  CaretRight,
+  MagnifyingGlass,
+  Plant,
+  ShoppingCartSimple,
+  X,
+} from "@phosphor-icons/react";
 import { api } from "@/lib/api.js";
 import { useAuth } from "@/lib/auth.jsx";
 import { useCart } from "@/lib/cart.jsx";
-import { uiIcons } from "@/styles/icons.js";
-import { duration, ease, spring } from "@/styles/tokens/motion.js";
-import Button from "./ui/Button.jsx";
+import { useApi } from "@/lib/useApi.js";
+import { asList, formatPHP } from "@/lib/format.js";
+import { cn } from "@/lib/cn.js";
+import { duration, ease } from "@/styles/tokens/motion.js";
 
 const links = [
-  { to: "/", label: "Home" },
+  { to: "/", label: "Home", end: true },
   { to: "/products", label: "Products" },
   { to: "/announcements", label: "Announcements" },
   { to: "/contact", label: "Contact" },
 ];
 
-const CartIcon = uiIcons.cart;
-const SuccessIcon = uiIcons.success;
-const ErrorIcon = uiIcons.error;
+const navItem = ({ isActive }) =>
+  cn(
+    "flex min-h-10 items-center rounded-md px-3 text-label font-semibold transition-colors duration-[var(--duration-fast)] ease-standard",
+    isActive ? "bg-muted text-fg" : "text-fg-muted hover:bg-muted hover:text-fg",
+  );
 
+/* Morphing sidebar. The floating logo disc grows into the whole navigation: a real
+   search, the route links, cart and account. It closes on route change, scrim click
+   or Escape, and the disc keeps the API status dot. */
 export default function Navbar() {
-  const { profile, role, logout } = useAuth();
+  const { profile, role, logout, isAuthenticated } = useAuth();
   const { count } = useCart();
-  const [health, setHealth] = useState("checking");
-  const [menuOpen, setMenuOpen] = useState(false);
+  const navigate = useNavigate();
   const location = useLocation();
 
-  // The primary links are hidden below md, so the disclosure menu carries them there.
+  const [open, setOpen] = useState(false);
+  const [term, setTerm] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [health, setHealth] = useState("checking");
+  const searchRef = useRef(null);
+
+  const results = useApi(
+    debounced.length >= 2 ? `/products?q=${encodeURIComponent(debounced)}&limit=5` : null,
+  );
+  const matches = asList(results.data);
+
   useEffect(() => {
-    setMenuOpen(false);
+    setOpen(false);
+    setTerm("");
+    setDebounced("");
   }, [location.pathname]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(term.trim()), 220);
+    return () => window.clearTimeout(timer);
+  }, [term]);
 
   useEffect(() => {
     let active = true;
@@ -43,137 +71,274 @@ export default function Navbar() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const focusTimer = window.setTimeout(() => searchRef.current?.focus(), 120);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.clearTimeout(focusTimer);
+    };
+  }, [open]);
+
+  const submitSearch = (event) => {
+    event.preventDefault();
+    const value = term.trim();
+    if (!value) return;
+    navigate(`/products?q=${encodeURIComponent(value)}`);
+    setTerm("");
+    setDebounced("");
+    setOpen(false);
+  };
+
   const canUseAdmin = role === "admin" || role === "staff";
+  const firstName = profile?.full_name?.split(" ")[0] ?? "Account";
 
   return (
-    <header className="sticky top-0 z-[var(--z-header)] bg-canvas">
-      <div className="mx-auto flex w-full max-w-[var(--container-wide)] items-center gap-6 px-4 py-3 lg:px-10">
-        <Link to="/" className="font-display text-heading-sm font-semibold text-fg">
-          AgriMart
-        </Link>
-
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
-          {links.map((link) => (
-            <NavLink
-              key={link.to}
-              to={link.to}
-              end={link.to === "/"}
-              className={({ isActive }) =>
-                `rounded-full px-3.5 py-2 text-label font-semibold transition-colors duration-[var(--duration-fast)] ${
-                  isActive ? "bg-primary-subtle text-primary-text" : "text-fg-muted hover:bg-muted"
-                }`
-              }
-            >
-              {link.label}
-            </NavLink>
-          ))}
-        </nav>
-
-        <div className="ml-auto flex items-center gap-3">
-          <button
-            type="button"
-            aria-expanded={menuOpen}
-            aria-controls="mobile-nav"
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            onClick={() => setMenuOpen((open) => !open)}
-            className="flex size-[var(--control-sm)] items-center justify-center rounded-full text-fg-muted hover:bg-muted md:hidden"
-          >
-            {menuOpen ? (
-              <X size={22} aria-hidden="true" />
-            ) : (
-              <List size={22} aria-hidden="true" />
-            )}
-          </button>
-
-          <Link
-            to="/cart"
-            className="relative flex items-center gap-2 rounded-full px-3 py-2 text-label font-semibold text-fg-muted hover:bg-muted"
-          >
-            <CartIcon size={20} aria-hidden="true" />
-            <span className="hidden sm:inline">Cart</span>
-            {count > 0 ? (
-              <m.span
-                key={count}
-                initial={{ scale: 1 }}
-                animate={{ scale: [1, 1.18, 1] }}
-                transition={spring.snappy}
-                aria-label={`${count} items in cart`}
-                className="absolute -top-0.5 -right-0.5 flex size-5 items-center justify-center rounded-full bg-primary text-caption font-semibold text-on-primary tabular-nums"
-              >
-                {count}
-              </m.span>
-            ) : null}
-          </Link>
-
-          {canUseAdmin ? (
-            <Link
-              to="/admin"
-              className="rounded-full px-3.5 py-2 text-label font-semibold text-fg-muted hover:bg-muted"
-            >
-              Admin
-            </Link>
-          ) : null}
-
-          {profile ? (
-            <div className="flex items-center gap-2">
-              <Link
-                to="/account"
-                className="rounded-full px-3 py-2 text-label font-semibold text-fg-muted hover:bg-muted"
-              >
-                {profile.full_name?.split(" ")[0] ?? "Account"}
-              </Link>
-              <Button size="sm" variant="secondary" onClick={logout}>
-                Log out
-              </Button>
-            </div>
-          ) : (
-            <Link
-              to="/login"
-              className="inline-flex h-[var(--control-sm)] items-center rounded-full bg-primary px-4 text-label font-semibold text-on-primary hover:bg-primary-hover"
-            >
-              Log in
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {menuOpen ? (
-          <m.nav
-            id="mobile-nav"
-            aria-label="Mobile"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            transition={{ duration: duration.base, ease: ease.standard }}
-            className="overflow-hidden bg-canvas md:hidden"
-          >
-            <ul className="mx-auto flex w-full max-w-[var(--container-wide)] flex-col gap-1 px-4 pb-3">
-              {links.map((link) => (
-                <li key={link.to}>
-                  <NavLink
-                    to={link.to}
-                    end={link.to === "/"}
-                    className={({ isActive }) =>
-                      `block rounded-md px-3 py-2.5 text-label font-semibold ${
-                        isActive ? "bg-primary-subtle text-primary-text" : "text-fg-muted"
-                      }`
-                    }
-                  >
-                    {link.label}
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
-          </m.nav>
+    <MotionConfig reducedMotion="user">
+      <AnimatePresence>
+        {open ? (
+          <m.div
+            key="scrim"
+            aria-hidden="true"
+            className="fixed inset-0 z-[var(--z-overlay)] bg-tile-inverse/25"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: duration.fast, ease: ease.standard }}
+            onClick={() => setOpen(false)}
+          />
         ) : null}
+      </AnimatePresence>
 
-      <p className="mx-auto flex w-full max-w-[var(--container-wide)] items-center gap-1.5 px-4 pb-2 text-caption text-fg-muted lg:px-10">
-        {health === "online" ? (
-          <SuccessIcon size={16} aria-hidden="true" className="text-primary-text" />
-        ) : (
-          <ErrorIcon size={16} aria-hidden="true" className="text-danger-text" />
-        )}
-        API {health}
-      </p>
-    </header>
+      {/* The disc and the panel share one layoutId, so Motion morphs between their
+          measured boxes (transform only, no reflow) every time, on a fresh load too. */}
+      <AnimatePresence initial={false}>
+          {open ? (
+            <m.nav
+              key="panel"
+              aria-label="Navigation"
+              className="no-print fixed top-4 left-4 z-[var(--z-sheet)] w-[min(22rem,calc(100vw-2rem))] origin-top-left overflow-hidden rounded-2xl bg-surface p-4"
+              initial={{ scale: 0.16, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.16, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 420, damping: 40, mass: 0.85 }}
+            >
+            <m.div
+              className="flex max-h-[calc(100dvh-2rem)] flex-col gap-4 overflow-y-auto"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: duration.fast, ease: ease.standard, delay: 0.09 }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <Link
+                  to="/"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2"
+                >
+                  <span className="flex size-9 items-center justify-center rounded-full bg-tint">
+                    <Plant size={20} weight="fill" className="text-primary-text" aria-hidden="true" />
+                  </span>
+                  <span className="font-display text-heading-sm text-fg">AgriMart</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close menu"
+                  className="flex size-9 items-center justify-center rounded-full text-fg-muted transition-colors duration-[var(--duration-fast)] hover:bg-muted hover:text-fg"
+                >
+                  <X size={18} aria-hidden="true" />
+                </button>
+              </div>
+
+              <div>
+                <label htmlFor="nav-search" className="sr-only">
+                  Search products
+                </label>
+                <div className="flex items-center gap-2 rounded-lg bg-muted px-3">
+                  <MagnifyingGlass size={18} className="shrink-0 text-fg-muted" aria-hidden="true" />
+                  <form onSubmit={submitSearch} className="min-w-0 flex-1">
+                    <input
+                      id="nav-search"
+                      ref={searchRef}
+                      type="search"
+                      value={term}
+                      onChange={(event) => setTerm(event.target.value)}
+                      placeholder="Search seeds, feed, tools..."
+                      className="h-10 w-full bg-transparent text-body-sm text-fg placeholder:text-fg-subtle focus:outline-none"
+                    />
+                  </form>
+                </div>
+
+                {term.trim().length > 0 ? (
+                  <div aria-live="polite" className="mt-2 rounded-lg bg-muted/60 p-1.5">
+                    {debounced.length < 2 ? (
+                      <p className="px-2 py-1.5 text-caption text-fg-muted">
+                        Keep typing to see matches.
+                      </p>
+                    ) : results.loading && matches.length === 0 ? (
+                      <p className="px-2 py-1.5 text-caption text-fg-muted">
+                        Searching for “{debounced}”...
+                      </p>
+                    ) : matches.length === 0 ? (
+                      <p className="px-2 py-1.5 text-caption text-fg-muted">
+                        No products match “{debounced}”.
+                      </p>
+                    ) : (
+                      <ul>
+                        {matches.map((product) => (
+                          <li key={product.id}>
+                            <Link
+                              to={`/products/${product.id}`}
+                              onClick={() => setOpen(false)}
+                              className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors duration-[var(--duration-fast)] hover:bg-muted"
+                            >
+                              <span className="size-8 shrink-0 overflow-hidden rounded-sm bg-muted">
+                                {product.image_url ? (
+                                  <img
+                                    src={product.image_url}
+                                    alt=""
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : null}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate text-body-sm text-fg">
+                                {product.name}
+                              </span>
+                              <span className="shrink-0 text-caption font-semibold text-fg tabular-nums">
+                                {formatPHP(product.price)}
+                              </span>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={submitSearch}
+                      className="mt-1 flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-label font-semibold text-primary-text transition-colors duration-[var(--duration-fast)] hover:bg-muted"
+                    >
+                      <span className="truncate">
+                        {debounced ? `View all results for “${debounced}”` : "View all results"}
+                      </span>
+                      <CaretRight size={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              <nav aria-label="Main">
+                <ul className="flex flex-col gap-0.5">
+                  {links.map((link) => (
+                    <li key={link.to}>
+                      <NavLink
+                        to={link.to}
+                        end={link.end}
+                        onClick={() => setOpen(false)}
+                        className={navItem}
+                      >
+                        {link.label}
+                      </NavLink>
+                    </li>
+                  ))}
+                  {canUseAdmin ? (
+                    <li>
+                      <NavLink to="/admin" onClick={() => setOpen(false)} className={navItem}>
+                        Admin
+                      </NavLink>
+                    </li>
+                  ) : null}
+                </ul>
+              </nav>
+
+              <div className="flex flex-col gap-2">
+                {isAuthenticated ? (
+                  <Link
+                    to="/cart"
+                    onClick={() => setOpen(false)}
+                    className="flex min-h-11 items-center justify-between gap-2 rounded-lg bg-tile-inverse px-4 text-label font-semibold text-on-inverse"
+                  >
+                    <span className="flex items-center gap-2">
+                      <ShoppingCartSimple size={20} aria-hidden="true" />
+                      Cart
+                    </span>
+                    <span className="rounded-full bg-highlight px-2 py-0.5 text-caption font-semibold text-on-highlight tabular-nums">
+                      {count}
+                    </span>
+                  </Link>
+                ) : null}
+
+                {profile ? (
+                  <>
+                    <Link
+                      to="/account"
+                      onClick={() => setOpen(false)}
+                      className="flex min-h-11 items-center justify-between gap-2 rounded-lg bg-muted px-4 text-label font-semibold text-fg"
+                    >
+                      <span className="truncate">{firstName}</span>
+                      <CaretRight size={16} aria-hidden="true" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={logout}
+                      className="flex min-h-11 items-center rounded-lg px-4 text-label font-semibold text-fg-muted transition-colors duration-[var(--duration-fast)] hover:bg-muted hover:text-fg"
+                    >
+                      Log out
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      to="/login"
+                      onClick={() => setOpen(false)}
+                      className="flex min-h-11 items-center justify-center rounded-full bg-primary px-4 text-label font-semibold text-on-primary hover:bg-primary-hover"
+                    >
+                      Log in
+                    </Link>
+                    <Link
+                      to="/signup"
+                      onClick={() => setOpen(false)}
+                      className="flex min-h-11 items-center justify-center rounded-full px-4 text-label font-semibold text-fg hover:bg-muted"
+                    >
+                      Create account
+                    </Link>
+                  </>
+                )}
+              </div>
+            </m.div>
+            </m.nav>
+          ) : (
+            <m.button
+              key="trigger"
+              type="button"
+              aria-label="Open navigation"
+              aria-expanded={false}
+              onClick={() => setOpen(true)}
+              className="no-print fixed top-4 left-4 z-[var(--z-sheet)] flex size-14 origin-top-left items-center justify-center rounded-full bg-surface text-primary-text"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: duration.instant, ease: ease.standard }}
+            >
+              <Plant size={24} weight="fill" aria-hidden="true" />
+              <span
+                role="status"
+                aria-label={`API ${health}`}
+                className={cn(
+                  "absolute right-3 bottom-3 size-2 rounded-full",
+                  health === "online" ? "bg-primary" : "bg-danger-fill",
+                )}
+              />
+            </m.button>
+          )}
+      </AnimatePresence>
+
+      <div className="no-print h-16" aria-hidden="true" />
+    </MotionConfig>
   );
-}
+}

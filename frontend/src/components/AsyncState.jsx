@@ -8,7 +8,7 @@ export function LoadingLines({ rows = 3, className }) {
     <div className={cn("flex flex-col gap-3", className)} aria-busy="true" aria-live="polite">
       <span className="sr-only">Loading</span>
       {Array.from({ length: rows }, (_, index) => (
-        <div key={index} className="h-[var(--row-h)] animate-pulse rounded-md bg-muted" />
+        <div key={index} className="h-[var(--row-h)] animate-pulse rounded-lg bg-muted" />
       ))}
     </div>
   );
@@ -18,12 +18,14 @@ export function ErrorNotice({ error, className, onRetry }) {
   return (
     <div
       role="alert"
-      className={cn("flex items-start gap-3 rounded-md bg-danger-subtle p-4", className)}
+      className={cn("flex items-start gap-3 rounded-lg bg-danger-subtle p-4", className)}
     >
       <XCircle size={20} weight="bold" className="mt-0.5 shrink-0 text-danger-text" aria-hidden="true" />
       <div className="flex flex-col gap-1">
-        <p className="text-label font-semibold text-danger-text">This part is not available yet</p>
-        <p className="text-body-sm text-danger-text">{error?.message ?? "The API did not answer."}</p>
+        <p className="text-label font-semibold text-danger-text">Could not load this</p>
+        <p className="text-body-sm text-danger-text">
+          {error?.message ?? "Check your connection and try again."}
+        </p>
         {onRetry ? (
           <button
             type="button"

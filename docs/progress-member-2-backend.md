@@ -8,6 +8,8 @@
 | Gates you sign | 1, 2, 3, 4, 5 |
 | Overview | `progress-00-overview.md` |
 
+> **Working-tree status (15 Nov 2026):** Phases 1 to 5 are implemented and the API passes `node --check`. The checkboxes below still record merge and gate sign-off, so they stay open until the work lands on `main` and the deployed checks pass. `README.md` has the feature summary.
+
 ---
 
 ## 1. Phase Progress

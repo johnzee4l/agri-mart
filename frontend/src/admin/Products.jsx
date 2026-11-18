@@ -20,7 +20,7 @@ import ProductFormDialog from "./ProductFormDialog.jsx";
 
 const PAGE_LIMIT = 20;
 const SELECT_CLASS =
-  "h-[var(--control-md)] rounded-md bg-surface px-3.5 text-base text-fg ring-1 ring-inset ring-field-edge";
+  "h-[var(--control-md)] rounded-md bg-muted px-3.5 text-base text-fg";
 
 /* The storefront list leaves "newest" implicit (an empty value); the admin select needs a
    real option for it, or the control shows the first choice while the state says newest. */

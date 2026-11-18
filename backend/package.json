@@ -11,6 +11,7 @@
     "dev": "node --env-file-if-exists=.env --watch src/index.js",
     "start": "node --env-file-if-exists=.env src/index.js",
     "smoke": "node scripts/smoke.mjs",
+    "seed:demo": "node --env-file-if-exists=.env scripts/seed-demo.mjs",
     "test": "node test/orders-webhook.test.mjs && node test/inventory.test.mjs && node test/admin.test.mjs && node test/push-events.test.mjs && node test/security.test.mjs"
   },
   "dependencies": {

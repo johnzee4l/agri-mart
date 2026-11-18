@@ -6,6 +6,7 @@ import { supabase } from "../lib/supabase.js";
 import { auth, requireRole, validate } from "../middleware.js";
 import { emitStock } from "../lib/realtime.js";
 import { notifyLowStock } from "../lib/lowStock.js";
+import { withUserProfiles } from "../lib/profile.js";
 
 /* FR-10, FR-11. The inventory log, the live low-stock list and the adjustments
    (stock-in, adjustment and spoilage) behind the admin Inventory page. Staff and
@@ -61,7 +62,20 @@ inventoryRouter.get("/logs", validate({ query: rangeQuery }), async (req, res) =
 
   if (reason) query = query.eq("reason", reason);
   if (req.query.from) query = query.gte("created_at", String(req.query.from));
-  if (req.query.to) query = query.lte("created_at", String(req.query.to));
+
+  /* A bare date means the whole day, so `to` becomes the start of the next day
+     (exclusive) instead of midnight, which would drop every log after 00:00. */
+  if (req.query.to) {
+    const raw = String(req.query.to);
+    const nextDay = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+      ? new Date(`${raw}T00:00:00.000Z`).getTime() + 24 * 60 * 60 * 1000
+      : null;
+
+    query =
+      nextDay === null
+        ? query.lte("created_at", raw)
+        : query.lt("created_at", new Date(nextDay).toISOString());
+  }
 
   const { data, error, count } = await query
     .order("created_at", { ascending: false })
@@ -69,7 +83,8 @@ inventoryRouter.get("/logs", validate({ query: rangeQuery }), async (req, res) =
 
   if (error) throw new ApiError(500, "Could not load the inventory log");
 
-  res.json({ data: data ?? [], page, total: count ?? 0 });
+  // `actor` is who moved the stock; a sale logged by the untiled job has no user.
+  res.json({ data: await withUserProfiles(data, "actor"), page, total: count ?? 0 });
 });
 
 inventoryRouter.get("/low-stock", async (_req, res) => {

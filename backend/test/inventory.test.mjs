@@ -251,7 +251,9 @@ try {
     assert.equal(event.payload.stock_qty, 7);
   });
 
-  const alert = await waitForEmail((message) => message.includes("Phase 4 feed"));
+  const alert = await waitForEmail(
+    (message) => message.includes("Phase 4 feed") && message.includes(adminAccount.email),
+  );
   await ok("the low-stock email reaches the admin", () => {
     assert.ok(alert, "no low-stock email arrived at the SMTP sink");
     assert.match(alert, /7 left \(reorder at 10\)/);

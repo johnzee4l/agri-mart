@@ -81,6 +81,52 @@ begin
 end;
 $$;
 
+-- Returns every line of a deducted order to the shelf exactly once. Used when an
+-- order is cancelled after its stock moved (paid, packed or completed). The log rows
+-- are 'adjustment' because this is a reversal, not a new sale.
+create or replace function public.restock_order(order_id uuid, actor_id uuid default null)
+returns setof public.products
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target public.orders;
+  line record;
+begin
+  select * into target from public.orders where orders.id = restock_order.order_id for update;
+
+  if target.id is null then
+    raise exception 'Order % not found', restock_order.order_id;
+  end if;
+
+  if not target.stock_deducted then
+    return;
+  end if;
+
+  for line in
+    select oi.product_id, oi.quantity
+    from public.order_items oi
+    where oi.order_id = restock_order.order_id
+  loop
+    update public.products p
+       set stock_qty = p.stock_qty + line.quantity
+     where p.id = line.product_id;
+
+    insert into public.inventory_logs (product_id, user_id, change_qty, reason)
+    values (line.product_id, restock_order.actor_id, line.quantity, 'adjustment');
+  end loop;
+
+  update public.orders set stock_deducted = false where orders.id = target.id;
+
+  return query
+    select p.*
+    from public.products p
+    join public.order_items oi on oi.product_id = p.id
+    where oi.order_id = target.id;
+end;
+$$;
+
 -- FR-18 reports. Aggregating in SQL keeps a date range from loading every order.
 create or replace function public.report_sales(from_date timestamptz, to_date timestamptz)
 returns table (day date, orders bigint, revenue numeric)

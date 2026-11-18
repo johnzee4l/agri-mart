@@ -10,7 +10,10 @@ export default function Segmented({ items, value, onChange, label = "Sections", 
     <div
       role="tablist"
       aria-label={label}
-      className={cn("inline-flex flex-wrap items-center gap-1 rounded-full bg-muted p-1", className)}
+      className={cn(
+        "inline-flex max-w-full flex-nowrap items-center gap-0.5 overflow-x-auto rounded-full bg-muted p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-1 [&::-webkit-scrollbar]:hidden",
+        className,
+      )}
     >
       {items.map((item) => {
         const active = item.value === value;
@@ -25,7 +28,7 @@ export default function Segmented({ items, value, onChange, label = "Sections", 
             aria-controls={`panel-${item.value}`}
             onClick={() => onChange(item.value)}
             className={cn(
-              "relative rounded-full px-4 py-2 text-label font-semibold transition-colors duration-[var(--duration-fast)]",
+              "relative shrink-0 rounded-full px-2.5 py-2 font-semibold whitespace-nowrap transition-colors duration-[var(--duration-fast)] sm:px-4",
               active ? "text-fg" : "text-fg-muted hover:text-fg",
             )}
           >
@@ -37,7 +40,7 @@ export default function Segmented({ items, value, onChange, label = "Sections", 
                 aria-hidden="true"
               />
             ) : null}
-            <span className="relative">{item.label}</span>
+            <span className="relative text-caption sm:text-label">{item.label}</span>
           </button>
         );
       })}

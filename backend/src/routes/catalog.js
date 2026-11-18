@@ -19,6 +19,11 @@ const productBody = z.object({
   brand: optionalText(120),
   unit: optionalText(40),
   price: z.coerce.number().min(0, "Price cannot be negative."),
+  compare_at_price: z.coerce
+    .number()
+    .min(0, "The original price cannot be negative.")
+    .nullable()
+    .optional(),
   stock_qty: z.coerce.number().int("Use a whole number.").min(0, "Stock cannot be negative."),
   reorder_level: z.coerce.number().int("Use a whole number.").min(0).optional(),
   image_url: optionalText(500),
@@ -74,6 +79,8 @@ catalogRouter.use(
   "/products",
   crudRouter({
     table: "products",
+    // ProductDetail shows the category name; one embedded join avoids a second call.
+    select: "*, category:categories(id, name)",
     createSchema: productBody,
     updateSchema: patchOf(productBody),
     searchColumns: ["name", "brand", "description"],

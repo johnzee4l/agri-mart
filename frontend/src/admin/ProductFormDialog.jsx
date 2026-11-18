@@ -15,6 +15,7 @@ import Input from "../components/ui/Input.jsx";
 const EMPTY = {
   name: "",
   price: "",
+  compare_at_price: "",
   category_id: "",
   brand: "",
   unit: "",
@@ -26,9 +27,9 @@ const EMPTY = {
 };
 
 const SELECT_CLASS =
-  "h-[var(--control-md)] w-full rounded-md bg-surface px-3.5 text-base text-fg ring-1 ring-inset ring-field-edge";
+  "h-[var(--control-md)] w-full rounded-md bg-muted px-3.5 text-base text-fg";
 const TEXTAREA_CLASS =
-  "min-h-[6rem] w-full rounded-md bg-surface p-3.5 text-base text-fg ring-1 ring-inset ring-field-edge placeholder:text-fg-subtle";
+  "min-h-[6rem] w-full rounded-md bg-muted p-3.5 text-base text-fg placeholder:text-fg-subtle";
 
 function fromProduct(product) {
   if (!product) return EMPTY;
@@ -36,6 +37,7 @@ function fromProduct(product) {
   return {
     name: product.name ?? "",
     price: String(product.price ?? ""),
+    compare_at_price: String(product.compare_at_price ?? ""),
     category_id: product.category_id ?? "",
     brand: product.brand ?? "",
     unit: product.unit ?? "",
@@ -107,6 +109,13 @@ export default function ProductFormDialog({ open, product, categories, onClose, 
       found.price = "Enter a price of zero or more.";
     }
 
+    if (form.compare_at_price !== "") {
+      const original = Number(form.compare_at_price);
+      if (!Number.isFinite(original) || original < 0) {
+        found.compare_at_price = "Enter an original price of zero or more.";
+      }
+    }
+
     if (!editing) {
       const stock = Number(form.stock_qty);
       if (form.stock_qty === "" || !Number.isInteger(stock) || stock < 0) {
@@ -127,6 +136,7 @@ export default function ProductFormDialog({ open, product, categories, onClose, 
     const body = {
       name: form.name.trim(),
       price,
+      compare_at_price: form.compare_at_price === "" ? null : Number(form.compare_at_price),
       category_id: form.category_id || null,
       brand: form.brand.trim() || null,
       unit: form.unit.trim() || null,
@@ -202,6 +212,18 @@ export default function ProductFormDialog({ open, product, categories, onClose, 
           )}
         </div>
 
+        <Input
+          label="Original price (optional)"
+          type="number"
+          step="0.01"
+          min="0"
+          inputMode="decimal"
+          hint="Shown struck through when it is higher than the price."
+          value={form.compare_at_price}
+          onChange={set("compare_at_price")}
+          error={errors.compare_at_price}
+        />
+
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-2">
             <span className="text-label font-semibold text-fg">Category</span>
@@ -249,7 +271,7 @@ export default function ProductFormDialog({ open, product, categories, onClose, 
               <img
                 src={form.image_url}
                 alt=""
-                className="size-16 rounded-lg object-cover ring-1 ring-inset ring-field-edge"
+                className="size-16 rounded-lg object-cover"
               />
             ) : (
               <span className="flex size-16 items-center justify-center rounded-lg bg-muted">

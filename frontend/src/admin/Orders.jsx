@@ -20,7 +20,7 @@ import { AdminTable, Cell, Pagination, Row } from "./AdminTable.jsx";
 const PAGE_LIMIT = 20;
 
 const SELECT_CLASS =
-  "h-[var(--control-md)] rounded-md bg-surface px-3.5 text-base text-fg ring-1 ring-inset ring-field-edge";
+  "h-[var(--control-md)] rounded-md bg-muted px-3.5 text-base text-fg";
 
 /* Mirrors TRANSITIONS in backend/src/routes/orders.js. */
 const TRANSITIONS = {
@@ -51,17 +51,32 @@ function methodLabel(method) {
 /** The moves the API will accept for this order, in the order staff work through them. */
 function nextStatuses(order) {
   const targets = new Set(TRANSITIONS[order.status] ?? []);
+  const payment = paymentOf(order);
 
-  // A COD order may be confirmed before any money moves (assertTransition).
-  if (order.status === "pending" && paymentOf(order)?.method === "cod") targets.add("preparing");
+  /* `paid` is a payment fact written by the PayMongo webhook. Staff confirm a COD
+     order by moving it straight to preparing, which is also when stock is deducted. */
+  targets.delete("paid");
+
+  if (order.status === "pending" && payment?.method === "cod") targets.add("preparing");
   // Pickup orders skip out for delivery.
   if (order.fulfillment_type === "pickup") targets.delete("out_for_delivery");
 
-  return [...targets];
+  const ordered = [...targets];
+  if (ordered.includes("preparing")) {
+    return ["preparing", ...ordered.filter((target) => target !== "preparing")];
+  }
+
+  return ordered;
 }
 
 function orderRef(id) {
   return `#${id.slice(0, 8).toUpperCase()}`;
+}
+
+/* Staff work in names. The reference stays as the secondary line for when it is
+   needed on a receipt or a phone call. */
+function customerName(order) {
+  return order?.customer?.full_name?.trim() || order?.customer?.phone || "Unnamed account";
 }
 
 export default function Orders() {
@@ -221,7 +236,7 @@ export default function Orders() {
       {rows.length > 0 ? (
         <AdminTable
           columns={[
-            { label: "Order" },
+            { label: "Customer" },
             { label: "Placed" },
             { label: "Fulfilment" },
             { label: "Payment" },
@@ -236,7 +251,12 @@ export default function Orders() {
             return (
               <Row key={row.id} index={index}>
                 <Cell>
-                  <span className="font-semibold text-fg tabular-nums">{orderRef(row.id)}</span>
+                  <span className="flex flex-col">
+                    <span className="font-semibold text-fg">{customerName(row)}</span>
+                    <span className="text-caption text-fg-muted tabular-nums">
+                      {orderRef(row.id)}
+                    </span>
+                  </span>
                 </Cell>
                 <Cell className="text-fg-muted">{formatDate(row.created_at)}</Cell>
                 <Cell className="text-fg-muted">
@@ -355,10 +375,18 @@ export default function Orders() {
                   {payment?.paid_at ? ` · ${formatDate(payment.paid_at)}` : ""}
                 </dd>
               </div>
-              <div className="flex items-center justify-between gap-4">
-                <dt className="text-body-sm text-fg-muted">Customer account</dt>
-                <dd className="text-body-sm text-fg-muted tabular-nums">
-                  {order.user_id.slice(0, 8)}
+              <div className="flex items-start justify-between gap-4">
+                <dt className="text-body-sm text-fg-muted">Customer</dt>
+                <dd className="flex flex-col items-end text-right">
+                  <span className="text-body-sm font-semibold text-fg">{customerName(order)}</span>
+                  {order.customer?.phone ? (
+                    <span className="text-caption text-fg-muted tabular-nums">
+                      {order.customer.phone}
+                    </span>
+                  ) : null}
+                  <span className="text-caption text-fg-subtle tabular-nums">
+                    {orderRef(order.id)}
+                  </span>
                 </dd>
               </div>
             </dl>
@@ -391,8 +419,9 @@ export default function Orders() {
               )}
 
               <p className="text-caption text-fg-subtle">
-                Every change emails the customer. Confirming a cash-on-delivery order deducts
-                stock; completing one marks it paid.
+                Every change emails the customer. Cash on delivery deducts stock when it moves
+                to preparing and is marked paid on completion. Online orders deduct stock when
+                the payment clears. Cancelling after either point returns the stock once.
               </p>
             </div>
           </div>

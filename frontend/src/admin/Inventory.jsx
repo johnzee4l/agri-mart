@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Package, Warning } from "@phosphor-icons/react";
 import { api } from "@/lib/api.js";
+import { fetchAllProducts } from "@/lib/catalog.js";
 import { cn } from "@/lib/cn.js";
 import { useApi } from "@/lib/useApi.js";
 import { asList, formatDate } from "@/lib/format.js";
@@ -19,7 +20,7 @@ import { AdminTable, Cell, Pagination, Row } from "./AdminTable.jsx";
 const PAGE_LIMIT = 20;
 
 const SELECT_CLASS =
-  "h-[var(--control-md)] rounded-md bg-surface px-3.5 text-base text-fg ring-1 ring-inset ring-field-edge";
+  "h-[var(--control-md)] rounded-md bg-muted px-3.5 text-base text-fg";
 
 const REASONS = [
   { value: "stock-in", label: "Stock in", hint: "Units arriving from a supplier." },
@@ -52,7 +53,26 @@ export default function Inventory() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
 
-  const products = useApi("/products?limit=60");
+  const [products, setProducts] = useState({ data: [], loading: true, error: null });
+  const [productVersion, setProductVersion] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setProducts((current) => ({ ...current, loading: true, error: null }));
+
+    fetchAllProducts()
+      .then((rows) => {
+        if (active) setProducts({ data: rows, loading: false, error: null });
+      })
+      .catch((error) => {
+        if (active) setProducts({ data: [], loading: false, error });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [productVersion]);
+
   const lowStock = useApi("/inventory/low-stock");
 
   const logQuery = new URLSearchParams();
@@ -80,7 +100,7 @@ export default function Inventory() {
   }
 
   function reloadAll() {
-    products.reload();
+    setProductVersion((current) => current + 1);
     lowStock.reload();
     logs.reload();
   }
@@ -319,8 +339,8 @@ export default function Inventory() {
                 {row.change_qty > 0 ? "+" : "−"}
                 {Math.abs(row.change_qty)}
               </Cell>
-              <Cell align="right" className="text-fg-muted tabular-nums">
-                {row.user_id?.slice(0, 8) ?? "—"}
+              <Cell align="right" className="text-fg-muted">
+                {row.actor?.full_name?.trim() || "Automatic"}
               </Cell>
             </Row>
           ))}

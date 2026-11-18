@@ -1,6 +1,27 @@
 /* Catalog helpers shared by the storefront pages. */
 
+import { api } from "./api.js";
+import { asList } from "./format.js";
+
 export const PAGE_SIZE = 12;
+
+const MAX_PAGES = 50;
+
+/** Every active product, page by page, for admin pickers that must not stop at 60. */
+export async function fetchAllProducts() {
+  const all = [];
+
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const payload = await api.get(`/products?limit=60&page=${page}`);
+    const rows = asList(payload);
+    all.push(...rows);
+
+    if (rows.length < 60) break;
+    if (Number(payload?.total) > 0 && all.length >= Number(payload.total)) break;
+  }
+
+  return all;
+}
 
 // Values match the sort parameter in docs/api.md.
 export const SORT_OPTIONS = [
